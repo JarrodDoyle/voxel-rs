@@ -6,14 +6,14 @@ use winit::{
 
 use crate::renderer;
 
-pub(crate) struct AppWindow {
+pub(crate) struct App {
     window: winit::window::Window,
     event_loop: EventLoop<()>,
     render_ctx: renderer::RenderContext,
     renderer: renderer::Renderer,
 }
 
-impl AppWindow {
+impl App {
     pub async fn new(width: u32, height: u32, title: &str) -> Self {
         log::info!("Initialising window...");
         let size = PhysicalSize::new(width, height);
