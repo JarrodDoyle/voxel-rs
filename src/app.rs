@@ -4,16 +4,13 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
+use crate::renderer;
+
 pub(crate) struct AppWindow {
     window: winit::window::Window,
     event_loop: EventLoop<()>,
-    instance: wgpu::Instance,
-    size: PhysicalSize<u32>,
-    surface: wgpu::Surface,
-    config: wgpu::SurfaceConfiguration,
-    adapter: wgpu::Adapter,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    render_ctx: renderer::RenderContext,
+    renderer: renderer::Renderer,
 }
 
 impl AppWindow {
@@ -27,63 +24,18 @@ impl AppWindow {
             .build(&event_loop)
             .unwrap();
 
-        log::info!("Initialising WGPU context...");
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
-            dx12_shader_compiler: Default::default(),
-        });
-
-        // To be able to start drawing to our window we need a few things:
-        // - A surface
-        // - A GPU device to draw to the surface
-        // - A draw command queue
-        log::info!("Initialising window surface...");
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-        log::info!("Requesting GPU adapter...");
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
-            })
-            .await
-            .unwrap();
-
-        log::info!("Checking GPU adapter meets requirements");
-        log::info!("Requesting GPU device...");
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
-                },
-                None,
-            )
-            .await
-            .unwrap();
-
-        log::info!("Configuring window surface...");
-        let config = surface
-            .get_default_config(&adapter, size.width, size.height)
-            .unwrap();
-        surface.configure(&device, &config);
+        let render_ctx = renderer::RenderContext::new(&window).await;
+        let renderer = renderer::Renderer::new(&render_ctx);
 
         Self {
             window,
             event_loop,
-            instance,
-            size,
-            surface,
-            config,
-            adapter,
-            device,
-            queue,
+            render_ctx,
+            renderer,
         }
     }
 
-    pub fn run(self) {
+    pub fn run(mut self) {
         self.event_loop
             .run(move |event, _, control_flow| match event {
                 Event::WindowEvent {
@@ -93,6 +45,12 @@ impl AppWindow {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => {}
                 },
+                Event::MainEventsCleared => {
+                    self.window.request_redraw();
+                }
+                Event::RedrawRequested(_) => {
+                    self.renderer.render(&self.render_ctx);
+                }
                 _ => {}
             });
     }
