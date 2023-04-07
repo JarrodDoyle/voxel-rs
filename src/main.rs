@@ -1,5 +1,6 @@
 mod app;
 mod renderer;
+mod texture;
 
 fn main() {
     env_logger::init();
