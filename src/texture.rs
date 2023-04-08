@@ -21,7 +21,7 @@ impl Default for TextureAttributes {
         Self {
             size: Default::default(),
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             address_mode_u: wgpu::AddressMode::default(),
             address_mode_v: wgpu::AddressMode::default(),
@@ -93,6 +93,8 @@ pub(crate) struct Texture {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     sampler: wgpu::Sampler,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub bind_group: wgpu::BindGroup,
 }
 
 impl Texture {
@@ -119,15 +121,60 @@ impl Texture {
             ..Default::default()
         });
 
+        // TODO: support texture view dimension configuration
+        let bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
+        let bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
         Self {
             attributes,
             texture,
             view,
             sampler,
+            bind_group_layout,
+            bind_group,
         }
     }
 
-    pub fn update(mut self, context: &RenderContext, data: &[u8]) {
+    pub fn update(&self, context: &RenderContext, data: &[u8]) {
+        log::info!("Updating texture contents...");
         let copy_texture = wgpu::ImageCopyTexture {
             texture: &self.texture,
             mip_level: 0,
