@@ -1,5 +1,7 @@
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::texture::{Texture, TextureBuilder};
+
 pub(crate) struct RenderContext {
     pub instance: wgpu::Instance,
     pub size: PhysicalSize<u32>,
@@ -71,6 +73,7 @@ impl RenderContext {
 pub(crate) struct Renderer {
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
+    render_texture: Texture,
 }
 
 impl Renderer {
@@ -78,6 +81,23 @@ impl Renderer {
         log::info!("Creating render shader...");
         let shader_descriptor = wgpu::include_wgsl!("../assets/shaders/shader.wgsl");
         let shader = context.device.create_shader_module(shader_descriptor);
+
+        log::info!("Creating render texture...");
+        let render_texture = TextureBuilder::new()
+            .with_size(context.size.width, context.size.height, 1)
+            .build(&context);
+
+        let data_len = context.size.width * context.size.height * 4;
+        let mut data: Vec<u8> = Vec::with_capacity(data_len.try_into().unwrap());
+        for y in 0..context.size.height {
+            for x in 0..context.size.width {
+                data.push(255u8);
+                data.push(128u8);
+                data.push(128u8);
+                data.push(255u8);
+            }
+        }
+        render_texture.update(&context, &data);
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
@@ -88,7 +108,7 @@ impl Renderer {
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("draw"),
-                            bind_group_layouts: &[],
+                            bind_group_layouts: &[&render_texture.bind_group_layout],
                             push_constant_ranges: &[],
                         },
                     )),
@@ -118,6 +138,7 @@ impl Renderer {
         Self {
             clear_color,
             render_pipeline,
+            render_texture,
         }
     }
 
@@ -131,7 +152,7 @@ impl Renderer {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
@@ -143,6 +164,11 @@ impl Renderer {
             })],
             depth_stencil_attachment: None,
         });
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.render_texture.bind_group, &[]);
+        render_pass.draw(0..6, 0..1);
+
+        drop(render_pass);
 
         context.queue.submit(Some(encoder.finish()));
         frame.present();
