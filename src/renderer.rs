@@ -72,6 +72,8 @@ impl RenderContext {
 
 pub(crate) struct Renderer {
     clear_color: wgpu::Color,
+    compute_pipeline: wgpu::ComputePipeline,
+    compute_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
     render_texture: Texture,
 }
@@ -85,15 +87,22 @@ impl Renderer {
         log::info!("Creating render texture...");
         let render_texture = TextureBuilder::new()
             .with_size(context.size.width, context.size.height, 1)
+            .with_format(wgpu::TextureFormat::Rgba8Unorm)
+            .with_usage(
+                wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::STORAGE_BINDING,
+            )
+            .with_shader_visibility(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
             .build(&context);
 
         let data_len = context.size.width * context.size.height * 4;
         let mut data: Vec<u8> = Vec::with_capacity(data_len.try_into().unwrap());
-        for y in 0..context.size.height {
-            for x in 0..context.size.width {
+        for _ in 0..context.size.height {
+            for _ in 0..context.size.width {
                 data.push(255u8);
-                data.push(128u8);
-                data.push(128u8);
+                data.push(0u8);
+                data.push(0u8);
                 data.push(255u8);
             }
         }
@@ -128,6 +137,64 @@ impl Renderer {
                     multiview: None,
                 });
 
+        log::info!("Creating compute pipeline...");
+        let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/image_recolor.wgsl");
+        let cs = context.device.create_shader_module(cs_descriptor);
+        let compute_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: None,
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: render_texture.attributes.format,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    }],
+                });
+        let compute_bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &compute_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&render_texture.view),
+                }],
+            });
+        let compute_pipeline =
+            context
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: Some(&context.device.create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("compute"),
+                            bind_group_layouts: &[&compute_layout],
+                            push_constant_ranges: &[],
+                        },
+                    )),
+                    module: &cs,
+                    entry_point: "compute",
+                });
+
+        let mut encoder = context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+
+        let size = render_texture.attributes.size;
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        compute_pass.set_pipeline(&compute_pipeline);
+        compute_pass.set_bind_group(0, &compute_bind_group, &[]);
+        compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
+        drop(compute_pass);
+
+        context.queue.submit(Some(encoder.finish()));
+
         let clear_color = wgpu::Color {
             r: 255.0 / 255.0,
             g: 216.0 / 255.0,
@@ -137,6 +204,8 @@ impl Renderer {
 
         Self {
             clear_color,
+            compute_pipeline,
+            compute_bind_group,
             render_pipeline,
             render_texture,
         }
