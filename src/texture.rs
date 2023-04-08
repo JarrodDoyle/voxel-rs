@@ -14,6 +14,7 @@ pub struct TextureAttributes {
     pub mag_filter: wgpu::FilterMode,
     pub min_filter: wgpu::FilterMode,
     pub mipmap_filter: wgpu::FilterMode,
+    pub shader_visibility: wgpu::ShaderStages,
 }
 
 impl Default for TextureAttributes {
@@ -29,6 +30,7 @@ impl Default for TextureAttributes {
             mag_filter: wgpu::FilterMode::default(),
             min_filter: wgpu::FilterMode::default(),
             mipmap_filter: wgpu::FilterMode::default(),
+            shader_visibility: wgpu::ShaderStages::FRAGMENT,
         }
     }
 }
@@ -67,6 +69,12 @@ impl TextureBuilder {
     }
 
     #[inline]
+    pub fn with_usage(mut self, usage: wgpu::TextureUsages) -> Self {
+        self.attributes.usage = usage;
+        self
+    }
+
+    #[inline]
     pub fn with_address_mode(mut self, address_mode: wgpu::AddressMode) -> Self {
         self.attributes.address_mode_u = address_mode;
         self.attributes.address_mode_v = address_mode;
@@ -83,16 +91,22 @@ impl TextureBuilder {
     }
 
     #[inline]
+    pub fn with_shader_visibility(mut self, visibility: wgpu::ShaderStages) -> Self {
+        self.attributes.shader_visibility = visibility;
+        self
+    }
+
+    #[inline]
     pub fn build(self, context: &RenderContext) -> Texture {
         Texture::new(context, self.attributes)
     }
 }
 
 pub(crate) struct Texture {
-    attributes: TextureAttributes,
-    texture: wgpu::Texture,
-    view: wgpu::TextureView,
-    sampler: wgpu::Sampler,
+    pub attributes: TextureAttributes,
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
 }
@@ -130,7 +144,7 @@ impl Texture {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            visibility: attributes.shader_visibility,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 view_dimension: wgpu::TextureViewDimension::D2,
@@ -140,7 +154,7 @@ impl Texture {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            visibility: attributes.shader_visibility,
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
