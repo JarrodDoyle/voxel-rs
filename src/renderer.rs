@@ -138,7 +138,7 @@ impl Renderer {
                 });
 
         log::info!("Creating compute pipeline...");
-        let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/image_recolor.wgsl");
+        let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/branchless_dda.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
         let compute_layout =
             context
@@ -182,19 +182,6 @@ impl Renderer {
                     entry_point: "compute",
                 });
 
-        let mut encoder = context
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-
-        let size = render_texture.attributes.size;
-        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-        compute_pass.set_pipeline(&compute_pipeline);
-        compute_pass.set_bind_group(0, &compute_bind_group, &[]);
-        compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
-        drop(compute_pass);
-
-        context.queue.submit(Some(encoder.finish()));
-
         let clear_color = wgpu::Color {
             r: 255.0 / 255.0,
             g: 216.0 / 255.0,
@@ -220,6 +207,13 @@ impl Renderer {
         let mut encoder = context
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+
+        let size = self.render_texture.attributes.size;
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        compute_pass.set_pipeline(&self.compute_pipeline);
+        compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+        compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
+        drop(compute_pass);
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
