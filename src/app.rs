@@ -45,7 +45,9 @@ impl App {
                     window_id,
                 } if window_id == self.window.id() => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    _ => {}
+                    _ => {
+                        self.renderer.input(&event);
+                    }
                 },
                 Event::MainEventsCleared => {
                     self.window.request_redraw();
@@ -54,6 +56,7 @@ impl App {
                     let now = Instant::now();
                     let dt = now - last_render_time;
                     last_render_time = now;
+                    self.renderer.update(dt, &self.render_ctx);
                     self.renderer.render(&self.render_ctx);
                 }
                 _ => {}

@@ -1,5 +1,10 @@
+use std::time::Duration;
+
+use wgpu::util::DeviceExt;
+use winit::event::WindowEvent;
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::camera;
 use crate::texture::{Texture, TextureBuilder};
 
 pub(crate) struct RenderContext {
@@ -77,6 +82,8 @@ pub(crate) struct Renderer {
     render_pipeline: wgpu::RenderPipeline,
     render_texture: Texture,
     voxel_texture: Texture,
+    camera_controller: camera::CameraController,
+    camera_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -131,6 +138,56 @@ impl Renderer {
             }
         }
         voxel_texture.update(&context, &data);
+
+        log::info!("Creating camera...");
+        let camera_controller = camera::CameraController::new(
+            context,
+            camera::Camera::new(
+                glam::Vec3 {
+                    x: 4.01,
+                    y: 4.01,
+                    z: 20.0,
+                },
+                -90.0_f32.to_radians(),
+                0.0_f32.to_radians(),
+            ),
+            camera::Projection::new(
+                context.size.width,
+                context.size.height,
+                90.0_f32.to_radians(),
+                0.01,
+                100.0,
+            ),
+            10.0,
+            0.25,
+        );
+
+        let camera_bind_group_layout =
+            context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                    label: Some("camera_bind_group_layout"),
+                });
+        let camera_bind_group = context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &camera_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_controller.get_buffer().as_entire_binding(),
+                }],
+                label: Some("camera_bind_group"),
+            });
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
@@ -201,6 +258,7 @@ impl Renderer {
                             bind_group_layouts: &[
                                 &compute_layout,
                                 &voxel_texture.bind_group_layout,
+                                &camera_bind_group_layout,
                             ],
                             push_constant_ranges: &[],
                         },
@@ -223,6 +281,8 @@ impl Renderer {
             render_pipeline,
             render_texture,
             voxel_texture,
+            camera_controller,
+            camera_bind_group,
         }
     }
 
@@ -241,6 +301,7 @@ impl Renderer {
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
         compute_pass.set_bind_group(1, &self.voxel_texture.bind_group, &[]);
+        compute_pass.set_bind_group(2, &self.camera_bind_group, &[]);
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
         drop(compute_pass);
 
@@ -264,5 +325,14 @@ impl Renderer {
 
         context.queue.submit(Some(encoder.finish()));
         frame.present();
+    }
+
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        self.camera_controller.process_events(event)
+    }
+
+    pub fn update(&mut self, dt: Duration, render_ctx: &RenderContext) {
+        self.camera_controller.update(dt);
+        self.camera_controller.update_buffer(render_ctx)
     }
 }

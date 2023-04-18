@@ -1,13 +1,14 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0) var voxels_t: texture_3d<f32>;
 @group(1) @binding(1) var voxels_s: sampler;
-// @group(2) @binding(0) var<uniform> camera: Camera;
+@group(2) @binding(0) var<uniform> camera: Camera;
 
-// struct Camera {
-//     projection: mat4x4<f32>,
-//     view: mat4x4<f32>,
-//     pos: vec3<f32>,
-// };
+struct Camera {
+    projection: mat4x4<f32>,
+    view: mat4x4<f32>,
+    pos: vec3<f32>,
+    _pad: f32,
+};
 
 struct HitInfo {
     hit: bool,
@@ -115,15 +116,10 @@ fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Construct ray
     let img_coord_frac = vec2<f32>(img_coord) / vec2<f32>(img_dims);
     let screen_pos = img_coord_frac * 2.0 - vec2<f32>(1.0);
-    // var ray_eye = camera.projection * vec4<f32>(screen_pos, -1.0, 0.0);
-    // ray_eye = vec4<f32>(ray_eye.xy, -1.0, 0.0);
-    // let ray_dir = normalize((camera.view * ray_eye).xyz);
-    // let ray_pos = camera.pos;
-    let camera_dir = vec3<f32>(0.01, 0.0, 0.8);
-    let camera_plane_u = vec3<f32>(1.0, 0.0, 0.0);
-    let camera_plane_v = vec3<f32>(0.0, 1.0, 0.0) * f32(img_dims.y) / f32(img_dims.x);
-    let ray_dir = camera_dir + screen_pos.x * camera_plane_u + screen_pos.y * camera_plane_v;
-    let ray_pos = vec3<f32>(-4.01, 5.0, -10.0);
+    var ray_eye = camera.projection * vec4<f32>(screen_pos, -1.0, 0.0);
+    ray_eye = vec4<f32>(ray_eye.xy, -1.0, 0.0);
+    let ray_dir = normalize((camera.view * ray_eye).xyz);
+    let ray_pos = camera.pos;
 
     // Cast the ray
     var hit_info = cast_ray(ray_pos, ray_dir);
