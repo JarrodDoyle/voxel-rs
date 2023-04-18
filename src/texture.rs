@@ -135,7 +135,12 @@ impl Texture {
             ..Default::default()
         });
 
-        // TODO: support texture view dimension configuration
+        let view_dimension = match attributes.dimension {
+            wgpu::TextureDimension::D1 => wgpu::TextureViewDimension::D1,
+            wgpu::TextureDimension::D2 => wgpu::TextureViewDimension::D2,
+            wgpu::TextureDimension::D3 => wgpu::TextureViewDimension::D3,
+        };
+
         let bind_group_layout =
             context
                 .device
@@ -147,7 +152,7 @@ impl Texture {
                             visibility: attributes.shader_visibility,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: wgpu::TextureViewDimension::D2,
+                                view_dimension: view_dimension,
                                 multisampled: false,
                             },
                             count: None,
