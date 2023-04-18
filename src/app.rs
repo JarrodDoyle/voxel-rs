@@ -1,3 +1,4 @@
+use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
@@ -36,6 +37,7 @@ impl App {
     }
 
     pub fn run(mut self) {
+        let mut last_render_time = Instant::now();
         self.event_loop
             .run(move |event, _, control_flow| match event {
                 Event::WindowEvent {
@@ -49,6 +51,9 @@ impl App {
                     self.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
+                    let now = Instant::now();
+                    let dt = now - last_render_time;
+                    last_render_time = now;
                     self.renderer.render(&self.render_ctx);
                 }
                 _ => {}
