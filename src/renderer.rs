@@ -76,6 +76,7 @@ pub(crate) struct Renderer {
     compute_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
     render_texture: Texture,
+    voxel_texture: Texture,
 }
 
 impl Renderer {
@@ -96,17 +97,40 @@ impl Renderer {
             .with_shader_visibility(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
             .build(&context);
 
-        let data_len = context.size.width * context.size.height * 4;
+        log::info!("Creating voxel volume texture...");
+        let voxel_texture = TextureBuilder::new()
+            .with_size(8, 8, 8)
+            .with_dimension(wgpu::TextureDimension::D3)
+            .with_format(wgpu::TextureFormat::Rgba8Unorm)
+            .with_usage(
+                wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::STORAGE_BINDING,
+            )
+            .with_shader_visibility(wgpu::ShaderStages::COMPUTE)
+            .build(&context);
+
+        let data_len = 8 * 8 * 8 * 4;
         let mut data: Vec<u8> = Vec::with_capacity(data_len.try_into().unwrap());
-        for _ in 0..context.size.height {
-            for _ in 0..context.size.width {
-                data.push(255u8);
-                data.push(0u8);
-                data.push(0u8);
-                data.push(255u8);
+        for z in 0..8 {
+            for y in 0..8 {
+                for x in 0..8 {
+                    let pos = glam::vec3(x as f32, y as f32, z as f32) - glam::vec3(4.0, 4.0, 4.0);
+                    if pos.length_squared() <= (u32::pow(4, 2) as f32) {
+                        data.push(((x + 1) * 32 - 1) as u8);
+                        data.push(((y + 1) * 32 - 1) as u8);
+                        data.push(((z + 1) * 32 - 1) as u8);
+                        data.push(255u8);
+                    } else {
+                        data.push(0u8);
+                        data.push(0u8);
+                        data.push(0u8);
+                        data.push(0u8);
+                    }
+                }
             }
         }
-        render_texture.update(&context, &data);
+        voxel_texture.update(&context, &data);
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
@@ -138,7 +162,7 @@ impl Renderer {
                 });
 
         log::info!("Creating compute pipeline...");
-        let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/branchless_dda.wgsl");
+        let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
         let compute_layout =
             context
@@ -174,7 +198,10 @@ impl Renderer {
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("compute"),
-                            bind_group_layouts: &[&compute_layout],
+                            bind_group_layouts: &[
+                                &compute_layout,
+                                &voxel_texture.bind_group_layout,
+                            ],
                             push_constant_ranges: &[],
                         },
                     )),
@@ -195,6 +222,7 @@ impl Renderer {
             compute_bind_group,
             render_pipeline,
             render_texture,
+            voxel_texture,
         }
     }
 
@@ -212,6 +240,7 @@ impl Renderer {
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+        compute_pass.set_bind_group(1, &self.voxel_texture.bind_group, &[]);
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
         drop(compute_pass);
 
