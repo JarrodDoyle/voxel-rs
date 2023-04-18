@@ -1,7 +1,7 @@
 mod app;
 mod camera;
+mod render;
 mod renderer;
-mod texture;
 
 fn main() {
     env_logger::init();

@@ -5,12 +5,12 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
-use crate::renderer;
+use crate::{render::Context, renderer};
 
 pub(crate) struct App {
     window: winit::window::Window,
     event_loop: EventLoop<()>,
-    render_ctx: renderer::RenderContext,
+    render_ctx: Context,
     renderer: renderer::Renderer,
 }
 
@@ -25,7 +25,7 @@ impl App {
             .build(&event_loop)
             .unwrap();
 
-        let render_ctx = renderer::RenderContext::new(&window).await;
+        let render_ctx = Context::new(&window).await;
         let renderer = renderer::Renderer::new(&render_ctx);
 
         Self {

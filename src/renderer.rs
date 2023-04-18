@@ -1,79 +1,10 @@
 use std::time::Duration;
-
-use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
-use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::camera;
-use crate::texture::{Texture, TextureBuilder};
-
-pub(crate) struct RenderContext {
-    pub instance: wgpu::Instance,
-    pub size: PhysicalSize<u32>,
-    pub surface: wgpu::Surface,
-    pub surface_config: wgpu::SurfaceConfiguration,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-}
-
-impl RenderContext {
-    pub async fn new(window: &Window) -> Self {
-        log::info!("Initialising WGPU context...");
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
-            dx12_shader_compiler: Default::default(),
-        });
-
-        // To be able to start drawing we need a few things:
-        // - A surface
-        // - A GPU device to draw to the surface
-        // - A draw command queue
-        log::info!("Initialising window surface...");
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-        log::info!("Requesting GPU adapter...");
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
-            })
-            .await
-            .unwrap();
-
-        log::info!("Checking GPU adapter meets requirements");
-        log::info!("Requesting GPU device...");
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
-                },
-                None,
-            )
-            .await
-            .unwrap();
-
-        log::info!("Configuring window surface...");
-        let size = window.inner_size();
-        let surface_config = surface
-            .get_default_config(&adapter, size.width, size.height)
-            .unwrap();
-        surface.configure(&device, &surface_config);
-
-        Self {
-            instance,
-            size,
-            surface,
-            surface_config,
-            adapter,
-            device,
-            queue,
-        }
-    }
-}
+use crate::{
+    camera,
+    render::{Context, Texture, TextureBuilder},
+};
 
 pub(crate) struct Renderer {
     clear_color: wgpu::Color,
@@ -87,7 +18,7 @@ pub(crate) struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(context: &RenderContext) -> Self {
+    pub fn new(context: &Context) -> Self {
         log::info!("Creating render shader...");
         let shader_descriptor = wgpu::include_wgsl!("../assets/shaders/shader.wgsl");
         let shader = context.device.create_shader_module(shader_descriptor);
@@ -286,7 +217,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, context: &RenderContext) {
+    pub fn render(&mut self, context: &Context) {
         let frame = context.surface.get_current_texture().unwrap();
         let view = frame
             .texture
@@ -331,7 +262,7 @@ impl Renderer {
         self.camera_controller.process_events(event)
     }
 
-    pub fn update(&mut self, dt: Duration, render_ctx: &RenderContext) {
+    pub fn update(&mut self, dt: Duration, render_ctx: &Context) {
         self.camera_controller.update(dt);
         self.camera_controller.update_buffer(render_ctx)
     }

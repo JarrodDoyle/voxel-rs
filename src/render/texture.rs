@@ -1,6 +1,6 @@
-use crate::renderer::RenderContext;
-
 // TODO: Support mip-mapping and multi-sampling
+
+use super::Context;
 
 #[derive(Debug, Clone)]
 pub struct TextureAttributes {
@@ -35,7 +35,7 @@ impl Default for TextureAttributes {
     }
 }
 
-pub(crate) struct TextureBuilder {
+pub struct TextureBuilder {
     pub attributes: TextureAttributes,
 }
 
@@ -97,12 +97,12 @@ impl TextureBuilder {
     }
 
     #[inline]
-    pub fn build(self, context: &RenderContext) -> Texture {
+    pub fn build(self, context: &Context) -> Texture {
         Texture::new(context, self.attributes)
     }
 }
 
-pub(crate) struct Texture {
+pub struct Texture {
     pub attributes: TextureAttributes,
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -112,7 +112,7 @@ pub(crate) struct Texture {
 }
 
 impl Texture {
-    pub fn new(context: &RenderContext, attributes: TextureAttributes) -> Self {
+    pub fn new(context: &Context, attributes: TextureAttributes) -> Self {
         let texture = context.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: attributes.size,
@@ -192,7 +192,7 @@ impl Texture {
         }
     }
 
-    pub fn update(&self, context: &RenderContext, data: &[u8]) {
+    pub fn update(&self, context: &Context, data: &[u8]) {
         log::info!("Updating texture contents...");
         let copy_texture = wgpu::ImageCopyTexture {
             texture: &self.texture,
