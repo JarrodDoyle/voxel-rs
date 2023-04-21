@@ -13,12 +13,10 @@ pub(crate) struct Renderer {
     render_pipeline: wgpu::RenderPipeline,
     render_texture: Texture,
     voxel_texture: Texture,
-    camera_controller: camera::CameraController,
-    camera_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
-    pub fn new(context: &Context) -> Self {
+    pub fn new(context: &Context, camera_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
         log::info!("Creating render shader...");
         let shader_descriptor = wgpu::include_wgsl!("../assets/shaders/shader.wgsl");
         let shader = context.device.create_shader_module(shader_descriptor);
@@ -71,45 +69,6 @@ impl Renderer {
         voxel_texture.update(&context, &data);
 
         log::info!("Creating camera...");
-        let camera_controller = camera::CameraController::new(
-            context,
-            camera::Camera::new(
-                glam::Vec3 {
-                    x: 4.01,
-                    y: 4.01,
-                    z: 20.0,
-                },
-                -90.0_f32.to_radians(),
-                0.0_f32.to_radians(),
-            ),
-            camera::Projection::new(
-                context.size.width,
-                context.size.height,
-                90.0_f32.to_radians(),
-                0.01,
-                100.0,
-            ),
-            10.0,
-            0.25,
-        );
-
-        let camera_bind_group_layout = BindGroupLayoutBuilder::new()
-            .with_label("camera_bind_group_layout")
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .build(context);
-        let camera_bind_group = BindGroupBuilder::new()
-            .with_label("camera_bind_group")
-            .with_layout(&camera_bind_group_layout)
-            .with_entry(camera_controller.get_buffer().as_entire_binding())
-            .build(context);
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
@@ -192,13 +151,10 @@ impl Renderer {
             render_pipeline,
             render_texture,
             voxel_texture,
-            camera_controller,
-            camera_bind_group,
         }
     }
 
-    // pub fn render(&mut self, context: &Context, encoders: &[wgpu::CommandEncoder]) {
-    pub fn render(&mut self, context: &Context) {
+    pub fn render(&self, context: &Context, camera_bind_group: &wgpu::BindGroup) {
         let frame = context.surface.get_current_texture().unwrap();
         let view = frame
             .texture
@@ -213,7 +169,7 @@ impl Renderer {
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
         compute_pass.set_bind_group(1, &self.voxel_texture.bind_group, &[]);
-        compute_pass.set_bind_group(2, &self.camera_bind_group, &[]);
+        compute_pass.set_bind_group(2, camera_bind_group, &[]);
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
         drop(compute_pass);
 
@@ -245,14 +201,5 @@ impl Renderer {
 
         // context.queue.submit(command_buffers);
         // frame.present();
-    }
-
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
-    }
-
-    pub fn update(&mut self, dt: Duration, render_ctx: &Context) {
-        self.camera_controller.update(dt);
-        self.camera_controller.update_buffer(render_ctx)
     }
 }
