@@ -223,8 +223,10 @@ impl CameraController {
 
         // Apply rotation
         let cam_ms = (self.move_speed * self.move_speed).to_radians() * dt;
+        let max_pitch = 85_f32.to_radians();
         self.camera.yaw += cam_ms * self.rot_dirs_pressed.x as f32;
         self.camera.pitch += cam_ms * self.rot_dirs_pressed.y as f32;
+        self.camera.pitch = self.camera.pitch.clamp(-max_pitch, max_pitch);
 
         // Debug log
         // log::info!("Camera Front: {:?}", front);
