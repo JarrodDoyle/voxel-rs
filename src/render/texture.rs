@@ -1,6 +1,6 @@
 // TODO: Support mip-mapping and multi-sampling
 
-use super::Context;
+use super::{BindGroupBuilder, BindGroupLayoutBuilder, Context};
 
 #[derive(Debug, Clone)]
 pub struct TextureAttributes {
@@ -141,46 +141,27 @@ impl Texture {
             wgpu::TextureDimension::D3 => wgpu::TextureViewDimension::D3,
         };
 
-        let bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: attributes.shader_visibility,
-                            ty: wgpu::BindingType::Texture {
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: view_dimension,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: attributes.shader_visibility,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                });
-        let bind_group = context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
+        let bind_group_layout = BindGroupLayoutBuilder::new()
+            .with_entry(
+                attributes.shader_visibility,
+                wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension,
+                    multisampled: false,
+                },
+                None,
+            )
+            .with_entry(
+                attributes.shader_visibility,
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                None,
+            )
+            .build(context);
+        let bind_group = BindGroupBuilder::new()
+            .with_layout(&bind_group_layout)
+            .with_entry(wgpu::BindingResource::TextureView(&view))
+            .with_entry(wgpu::BindingResource::Sampler(&sampler))
+            .build(context);
 
         Self {
             attributes,

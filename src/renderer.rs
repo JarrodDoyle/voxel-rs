@@ -3,7 +3,7 @@ use winit::event::WindowEvent;
 
 use crate::{
     camera,
-    render::{Context, Texture, TextureBuilder},
+    render::{BindGroupBuilder, BindGroupLayoutBuilder, Context, Texture, TextureBuilder},
 };
 
 pub(crate) struct Renderer {
@@ -93,32 +93,23 @@ impl Renderer {
             0.25,
         );
 
-        let camera_bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                    label: Some("camera_bind_group_layout"),
-                });
-        let camera_bind_group = context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &camera_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_controller.get_buffer().as_entire_binding(),
-                }],
-                label: Some("camera_bind_group"),
-            });
+        let camera_bind_group_layout = BindGroupLayoutBuilder::new()
+            .with_label("camera_bind_group_layout")
+            .with_entry(
+                wgpu::ShaderStages::COMPUTE,
+                wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                None,
+            )
+            .build(context);
+        let camera_bind_group = BindGroupBuilder::new()
+            .with_label("camera_bind_group")
+            .with_layout(&camera_bind_group_layout)
+            .with_entry(camera_controller.get_buffer().as_entire_binding())
+            .build(context);
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
@@ -152,32 +143,21 @@ impl Renderer {
         log::info!("Creating compute pipeline...");
         let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
-        let compute_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: render_texture.attributes.format,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    }],
-                });
-        let compute_bind_group = context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &compute_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&render_texture.view),
-                }],
-            });
+        let compute_layout = BindGroupLayoutBuilder::new()
+            .with_entry(
+                wgpu::ShaderStages::COMPUTE,
+                wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: render_texture.attributes.format,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                None,
+            )
+            .build(context);
+        let compute_bind_group = BindGroupBuilder::new()
+            .with_layout(&compute_layout)
+            .with_entry(wgpu::BindingResource::TextureView(&render_texture.view))
+            .build(context);
         let compute_pipeline =
             context
                 .device
@@ -217,6 +197,7 @@ impl Renderer {
         }
     }
 
+    // pub fn render(&mut self, context: &Context, encoders: &[wgpu::CommandEncoder]) {
     pub fn render(&mut self, context: &Context) {
         let frame = context.surface.get_current_texture().unwrap();
         let view = frame
@@ -256,6 +237,14 @@ impl Renderer {
 
         context.queue.submit(Some(encoder.finish()));
         frame.present();
+
+        // let mut command_buffers = Vec::with_capacity(encoders.len());
+        // for encoder in encoders {
+        //     command_buffers.push(encoder.finish());
+        // }
+
+        // context.queue.submit(command_buffers);
+        // frame.present();
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
