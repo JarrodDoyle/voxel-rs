@@ -1,6 +1,6 @@
-use crate::renderer::RenderContext;
-
 // TODO: Support mip-mapping and multi-sampling
+
+use super::{BindGroupBuilder, BindGroupLayoutBuilder, Context};
 
 #[derive(Debug, Clone)]
 pub struct TextureAttributes {
@@ -35,7 +35,7 @@ impl Default for TextureAttributes {
     }
 }
 
-pub(crate) struct TextureBuilder {
+pub struct TextureBuilder {
     pub attributes: TextureAttributes,
 }
 
@@ -97,12 +97,12 @@ impl TextureBuilder {
     }
 
     #[inline]
-    pub fn build(self, context: &RenderContext) -> Texture {
+    pub fn build(self, context: &Context) -> Texture {
         Texture::new(context, self.attributes)
     }
 }
 
-pub(crate) struct Texture {
+pub struct Texture {
     pub attributes: TextureAttributes,
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -112,7 +112,7 @@ pub(crate) struct Texture {
 }
 
 impl Texture {
-    pub fn new(context: &RenderContext, attributes: TextureAttributes) -> Self {
+    pub fn new(context: &Context, attributes: TextureAttributes) -> Self {
         let texture = context.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: attributes.size,
@@ -141,46 +141,27 @@ impl Texture {
             wgpu::TextureDimension::D3 => wgpu::TextureViewDimension::D3,
         };
 
-        let bind_group_layout =
-            context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: attributes.shader_visibility,
-                            ty: wgpu::BindingType::Texture {
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: view_dimension,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: attributes.shader_visibility,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                });
-        let bind_group = context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
+        let bind_group_layout = BindGroupLayoutBuilder::new()
+            .with_entry(
+                attributes.shader_visibility,
+                wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension,
+                    multisampled: false,
+                },
+                None,
+            )
+            .with_entry(
+                attributes.shader_visibility,
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                None,
+            )
+            .build(context);
+        let bind_group = BindGroupBuilder::new()
+            .with_layout(&bind_group_layout)
+            .with_entry(wgpu::BindingResource::TextureView(&view))
+            .with_entry(wgpu::BindingResource::Sampler(&sampler))
+            .build(context);
 
         Self {
             attributes,
@@ -192,7 +173,7 @@ impl Texture {
         }
     }
 
-    pub fn update(&self, context: &RenderContext, data: &[u8]) {
+    pub fn update(&self, context: &Context, data: &[u8]) {
         log::info!("Updating texture contents...");
         let copy_texture = wgpu::ImageCopyTexture {
             texture: &self.texture,

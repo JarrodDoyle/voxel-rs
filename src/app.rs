@@ -5,13 +5,12 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
-use crate::renderer;
+use crate::{camera, render, renderer};
 
 pub(crate) struct App {
     window: winit::window::Window,
     event_loop: EventLoop<()>,
-    render_ctx: renderer::RenderContext,
-    renderer: renderer::Renderer,
+    render_ctx: render::Context,
 }
 
 impl App {
@@ -25,18 +24,58 @@ impl App {
             .build(&event_loop)
             .unwrap();
 
-        let render_ctx = renderer::RenderContext::new(&window).await;
-        let renderer = renderer::Renderer::new(&render_ctx);
+        let render_ctx = render::Context::new(&window).await;
 
         Self {
             window,
             event_loop,
             render_ctx,
-            renderer,
         }
     }
 
-    pub fn run(mut self) {
+    pub fn run(self) {
+        let mut camera_controller = camera::CameraController::new(
+            &self.render_ctx,
+            camera::Camera::new(
+                glam::Vec3 {
+                    x: 4.01,
+                    y: 4.01,
+                    z: 20.0,
+                },
+                -90.0_f32.to_radians(),
+                0.0_f32.to_radians(),
+            ),
+            camera::Projection::new(
+                self.render_ctx.size.width,
+                self.render_ctx.size.height,
+                90.0_f32.to_radians(),
+                0.01,
+                100.0,
+            ),
+            10.0,
+            0.25,
+        );
+
+        let camera_bind_group_layout = render::BindGroupLayoutBuilder::new()
+            .with_label("camera_bind_group_layout")
+            .with_entry(
+                wgpu::ShaderStages::COMPUTE,
+                wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                None,
+            )
+            .build(&self.render_ctx);
+        let camera_bind_group = render::BindGroupBuilder::new()
+            .with_label("camera_bind_group")
+            .with_layout(&camera_bind_group_layout)
+            .with_entry(camera_controller.get_buffer().as_entire_binding())
+            .build(&self.render_ctx);
+
+        let renderer = renderer::Renderer::new(&self.render_ctx, &camera_bind_group_layout);
+
         let mut last_render_time = Instant::now();
         self.event_loop
             .run(move |event, _, control_flow| match event {
@@ -46,7 +85,7 @@ impl App {
                 } if window_id == self.window.id() => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => {
-                        self.renderer.input(&event);
+                        camera_controller.process_events(&event);
                     }
                 },
                 Event::MainEventsCleared => {
@@ -56,8 +95,9 @@ impl App {
                     let now = Instant::now();
                     let dt = now - last_render_time;
                     last_render_time = now;
-                    self.renderer.update(dt, &self.render_ctx);
-                    self.renderer.render(&self.render_ctx);
+                    camera_controller.update(dt);
+                    camera_controller.update_buffer(&self.render_ctx);
+                    renderer.render(&self.render_ctx, &camera_bind_group);
                 }
                 _ => {}
             });

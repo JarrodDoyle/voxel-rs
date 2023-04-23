@@ -2,7 +2,7 @@ use std::time::Duration;
 use wgpu::util::DeviceExt;
 use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-use crate::renderer::RenderContext;
+use crate::render::Context;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -103,7 +103,7 @@ pub(crate) struct CameraController {
 
 impl CameraController {
     pub fn new(
-        context: &RenderContext,
+        context: &Context,
         camera: Camera,
         projection: Projection,
         move_speed: f32,
@@ -236,7 +236,7 @@ impl CameraController {
         // log::info!("Camera Pitch: {:?}", self.camera.pitch);
     }
 
-    pub fn update_buffer(&mut self, context: &RenderContext) {
+    pub fn update_buffer(&mut self, context: &Context) {
         self.uniform.update(
             self.camera.get_view_matrix(),
             self.projection.get_matrix(),
