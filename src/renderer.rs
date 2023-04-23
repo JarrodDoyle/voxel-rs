@@ -1,10 +1,4 @@
-use std::time::Duration;
-use winit::event::WindowEvent;
-
-use crate::{
-    camera,
-    render::{BindGroupBuilder, BindGroupLayoutBuilder, Context, Texture, TextureBuilder},
-};
+use crate::render::{BindGroupBuilder, BindGroupLayoutBuilder, Context, Texture, TextureBuilder};
 
 pub(crate) struct Renderer {
     clear_color: wgpu::Color,
