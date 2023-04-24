@@ -35,6 +35,7 @@ impl Default for TextureAttributes {
     }
 }
 
+#[derive(Debug)]
 pub struct TextureBuilder {
     pub attributes: TextureAttributes,
 }
@@ -102,6 +103,7 @@ impl TextureBuilder {
     }
 }
 
+#[derive(Debug)]
 pub struct Texture {
     pub attributes: TextureAttributes,
     pub texture: wgpu::Texture,
