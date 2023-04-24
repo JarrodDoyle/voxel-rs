@@ -45,7 +45,7 @@ impl Renderer {
         for z in 0..8 {
             for y in 0..8 {
                 for x in 0..8 {
-                    let pos = glam::vec3(x as f32, y as f32, z as f32) - glam::vec3(4.0, 4.0, 4.0);
+                    let pos = glam::vec3(x as f32, y as f32, z as f32) - glam::vec3(3.5, 3.5, 3.5);
                     if pos.length_squared() <= (u32::pow(4, 2) as f32) {
                         data.push(((x + 1) * 32 - 1) as u8);
                         data.push(((y + 1) * 32 - 1) as u8);
