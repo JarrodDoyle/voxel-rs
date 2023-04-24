@@ -1,6 +1,11 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<storage, read> brickmap: Brickmap;
-@group(0) @binding(2) var<uniform> camera: Camera;
+@group(0) @binding(2) var<storage, read> shading_table: array<ShadingElement>;
+@group(0) @binding(3) var<uniform> camera: Camera;
+
+struct ShadingElement {
+    albedo: u32,
+}
 
 struct Brickmap {
     bitmask: array<u32, 16>,
@@ -25,6 +30,19 @@ struct AabbHitInfo {
     hit: bool,
     distance: f32,
 };
+
+// TODO: Include brickmap base shading table offset
+fn get_shading_offset(p: vec3<i32>) -> u32 {
+    let local_index = u32(p.x + p.y * 8 + p.z * 64);
+    let bitmask_index = local_index / 32u;
+    var shading_offset = 0u;
+    for (var i: i32 = 0; i < i32(bitmask_index); i++) {
+        shading_offset += countOneBits(brickmap.bitmask[i]);
+    }
+    let extracted_bits = extractBits(brickmap.bitmask[bitmask_index], 0u, (local_index % 32u));
+    shading_offset += countOneBits(extracted_bits);
+    return shading_offset;
+}
 
 fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
     let ray_dir_inv = 1.0 / ray_dir;
@@ -142,6 +160,12 @@ fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
         else {
             color = vec4<f32>(1.0);
         }
+        let offset = get_shading_offset(hit_info.hit_pos);
+        let raw_color = shading_table[offset].albedo;
+        color.x = f32((raw_color >> 24u) & 255u) / 255.0;
+        color.y = f32((raw_color >> 16u) & 255u) / 255.0;
+        color.z = f32((raw_color >> 8u) & 255u) / 255.0;
+        color.w = f32(raw_color & 255u) / 255.0;
         // color = textureLoad(voxels_t, hit_info.hit_pos, 0);
     }
 
