@@ -1,6 +1,6 @@
-use crate::render::{BindGroupBuilder, BindGroupLayoutBuilder, Context, Texture, TextureBuilder};
+use super::{BindGroupBuilder, BindGroupLayoutBuilder, Context, Texture, TextureBuilder};
 
-pub(crate) struct Renderer {
+pub struct Renderer {
     clear_color: wgpu::Color,
     compute_pipeline: wgpu::ComputePipeline,
     compute_bind_group: wgpu::BindGroup,
@@ -12,7 +12,7 @@ pub(crate) struct Renderer {
 impl Renderer {
     pub fn new(context: &Context, camera_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
         log::info!("Creating render shader...");
-        let shader_descriptor = wgpu::include_wgsl!("../assets/shaders/shader.wgsl");
+        let shader_descriptor = wgpu::include_wgsl!("../../assets/shaders/shader.wgsl");
         let shader = context.device.create_shader_module(shader_descriptor);
 
         log::info!("Creating render texture...");
@@ -94,7 +94,7 @@ impl Renderer {
                 });
 
         log::info!("Creating compute pipeline...");
-        let cs_descriptor = wgpu::include_wgsl!("../assets/shaders/voxel_volume.wgsl");
+        let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
         let compute_layout = BindGroupLayoutBuilder::new()
             .with_entry(

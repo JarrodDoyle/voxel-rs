@@ -5,7 +5,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
-use crate::{camera, render, renderer};
+use crate::{camera, render};
 
 pub(crate) struct App {
     window: winit::window::Window,
@@ -74,7 +74,7 @@ impl App {
             .with_entry(camera_controller.get_buffer().as_entire_binding())
             .build(&self.render_ctx);
 
-        let renderer = renderer::Renderer::new(&self.render_ctx, &camera_bind_group_layout);
+        let renderer = render::Renderer::new(&self.render_ctx, &camera_bind_group_layout);
 
         let mut last_render_time = Instant::now();
         self.event_loop
