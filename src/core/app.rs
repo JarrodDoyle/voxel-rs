@@ -5,9 +5,10 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
-use crate::{camera, render};
+use super::camera;
+use crate::render;
 
-pub(crate) struct App {
+pub struct App {
     window: winit::window::Window,
     event_loop: EventLoop<()>,
     render_ctx: render::Context,
