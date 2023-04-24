@@ -90,7 +90,7 @@ impl Projection {
 }
 
 #[derive(Debug)]
-pub(crate) struct CameraController {
+pub struct CameraController {
     camera: Camera,
     projection: Projection,
     uniform: CameraUniform,
