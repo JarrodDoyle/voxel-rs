@@ -60,25 +60,6 @@ impl App {
             0.25,
         );
 
-        let camera_bind_group_layout = render::BindGroupLayoutBuilder::new()
-            .with_label("camera_bind_group_layout")
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .build(&self.render_ctx);
-        let camera_bind_group = render::BindGroupBuilder::new()
-            .with_label("camera_bind_group")
-            .with_layout(&camera_bind_group_layout)
-            .with_entry(camera_controller.get_buffer().as_entire_binding())
-            .build(&self.render_ctx);
-
-        // let renderer = render::Renderer::new(&self.render_ctx, &camera_bind_group_layout);
         let renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
 
         let mut last_render_time = Instant::now();
