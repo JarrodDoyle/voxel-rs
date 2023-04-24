@@ -7,7 +7,7 @@ pub struct VoxelRenderer {
     clear_color: wgpu::Color,
     render_texture: render::Texture,
     render_pipeline: wgpu::RenderPipeline,
-    voxel_texture: render::Texture,
+    brickmap_manager: super::brickmap::BrickmapManager,
     compute_pipeline: wgpu::ComputePipeline,
     compute_bind_group: wgpu::BindGroup,
 }
@@ -59,40 +59,25 @@ impl VoxelRenderer {
                     multiview: None,
                 });
 
-        log::info!("Creating voxel volume texture...");
-        let voxel_texture = render::TextureBuilder::new()
-            .with_size(8, 8, 8)
-            .with_dimension(wgpu::TextureDimension::D3)
-            .with_format(wgpu::TextureFormat::Rgba8Unorm)
-            .with_usage(
-                wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::STORAGE_BINDING,
-            )
-            .with_shader_visibility(wgpu::ShaderStages::COMPUTE)
-            .build(&context);
-
-        let data_len = 8 * 8 * 8 * 4;
-        let mut data: Vec<u8> = Vec::with_capacity(data_len.try_into().unwrap());
+        log::info!("Creating brickmap manager...");
+        let mut brickmap_manager = super::brickmap::BrickmapManager::new(context);
+        let mut data = [0xFFFFFFFF as u32; 16];
         for z in 0..8 {
+            let mut entry = 0u64;
             for y in 0..8 {
                 for x in 0..8 {
+                    let idx = x + y * 8;
                     let pos = glam::vec3(x as f32, y as f32, z as f32) - glam::vec3(3.5, 3.5, 3.5);
                     if pos.length_squared() <= (u32::pow(4, 2) as f32) {
-                        data.push(((x + 1) * 32 - 1) as u8);
-                        data.push(((y + 1) * 32 - 1) as u8);
-                        data.push(((z + 1) * 32 - 1) as u8);
-                        data.push(255u8);
-                    } else {
-                        data.push(0u8);
-                        data.push(0u8);
-                        data.push(0u8);
-                        data.push(0u8);
+                        entry += 1 << idx;
                     }
                 }
             }
+            data[2 * z] = (entry & 0xFFFFFFFF).try_into().unwrap();
+            data[2 * z + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
         }
-        voxel_texture.update(&context, &data);
+        brickmap_manager.set_data(&data);
+        brickmap_manager.update_buffer(context);
 
         log::info!("Creating compute pipeline...");
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
@@ -110,6 +95,15 @@ impl VoxelRenderer {
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
                 wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                None,
+            )
+            .with_entry(
+                wgpu::ShaderStages::COMPUTE,
+                wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
                     min_binding_size: None,
@@ -120,6 +114,7 @@ impl VoxelRenderer {
         let compute_bind_group = render::BindGroupBuilder::new()
             .with_layout(&compute_layout)
             .with_entry(wgpu::BindingResource::TextureView(&render_texture.view))
+            .with_entry(brickmap_manager.get_buffer().as_entire_binding())
             .with_entry(camera_controller.get_buffer().as_entire_binding())
             .build(context);
         let compute_pipeline =
@@ -130,10 +125,7 @@ impl VoxelRenderer {
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("compute"),
-                            bind_group_layouts: &[
-                                &compute_layout,
-                                &voxel_texture.bind_group_layout,
-                            ],
+                            bind_group_layouts: &[&compute_layout],
                             push_constant_ranges: &[],
                         },
                     )),
@@ -145,7 +137,7 @@ impl VoxelRenderer {
             clear_color: wgpu::Color::BLACK,
             render_texture,
             render_pipeline,
-            voxel_texture,
+            brickmap_manager,
             compute_pipeline,
             compute_bind_group,
         }
@@ -167,7 +159,6 @@ impl render::Renderer for VoxelRenderer {
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
-        compute_pass.set_bind_group(1, &self.voxel_texture.bind_group, &[]);
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
         drop(compute_pass);
 

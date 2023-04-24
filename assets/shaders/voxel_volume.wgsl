@@ -1,7 +1,12 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(1) var<uniform> camera: Camera;
-@group(1) @binding(0) var voxels_t: texture_3d<f32>;
-@group(1) @binding(1) var voxels_s: sampler;
+@group(0) @binding(1) var<storage, read> brickmap: Brickmap;
+@group(0) @binding(2) var<uniform> camera: Camera;
+
+struct Brickmap {
+    bitmask: array<u32, 16>,
+    shading_table_offset: u32,
+    lod_color: u32,
+}
 
 struct Camera {
     projection: mat4x4<f32>,
@@ -24,7 +29,7 @@ struct AabbHitInfo {
 fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
     let ray_dir_inv = 1.0 / ray_dir;
     let t1 = (vec3<f32>(0.0) - ray_pos) * ray_dir_inv;
-    let t2 = (vec3<f32>(textureDimensions(voxels_t)) - ray_pos) * ray_dir_inv;
+    let t2 = (vec3<f32>(8.0) - ray_pos) * ray_dir_inv;
     let t_min = min(t1, t2);
     let t_max = max(t1, t2);
     let tmin = max(max(t_min.x, 0.0), max(t_min.y, t_min.z));
@@ -33,13 +38,13 @@ fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
 }
 
 fn point_inside_aabb(p: vec3<i32>) -> bool {
-    let clamped = clamp(p, vec3<i32>(0), textureDimensions(voxels_t) - vec3<i32>(1));
+    let clamped = clamp(p, vec3<i32>(0), vec3<i32>(8) - vec3<i32>(1));
     return clamped.x == p.x && clamped.y == p.y && clamped.z == p.z;
 }
 
 fn voxel_hit(p: vec3<i32>) -> bool {
-    let v = textureLoad(voxels_t, p, 0);
-    return length(v) != 0.0;
+    let local_index = u32(p.x + p.y * 8 + p.z * 64);
+    return (brickmap.bitmask[local_index / 32u] >> (local_index % 32u) & 1u) != 0u;
 }
 
 fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
@@ -125,19 +130,19 @@ fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var hit_info = cast_ray(ray_pos, ray_dir);
     var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     if (hit_info.hit){
-        // if (hit_info.mask.x) {
-        //     color.x = 1.0;
-        // }
-        // else if (hit_info.mask.y) {
-        //     color.y = 1.0;
-        // }
-        // else if (hit_info.mask.z) {
-        //     color.z = 1.0;
-        // }
-        // else {
-        //     color = vec4<f32>(1.0);
-        // }
-        color = textureLoad(voxels_t, hit_info.hit_pos, 0);
+        if (hit_info.mask.x) {
+            color.x = 1.0;
+        }
+        else if (hit_info.mask.y) {
+            color.y = 1.0;
+        }
+        else if (hit_info.mask.z) {
+            color.z = 1.0;
+        }
+        else {
+            color = vec4<f32>(1.0);
+        }
+        // color = textureLoad(voxels_t, hit_info.hit_pos, 0);
     }
 
     textureStore(output, img_coord, color);
