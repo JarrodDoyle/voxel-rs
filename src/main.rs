@@ -1,5 +1,6 @@
 mod core;
 mod render;
+mod voxel;
 
 fn main() {
     env_logger::init();

@@ -1,7 +1,7 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(1) var<uniform> camera: Camera;
 @group(1) @binding(0) var voxels_t: texture_3d<f32>;
 @group(1) @binding(1) var voxels_s: sampler;
-@group(2) @binding(0) var<uniform> camera: Camera;
 
 struct Camera {
     projection: mat4x4<f32>,

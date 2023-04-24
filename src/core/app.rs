@@ -6,7 +6,10 @@ use winit::{
 };
 
 use super::camera;
-use crate::render;
+use crate::{
+    render::{self, Renderer},
+    voxel,
+};
 
 pub struct App {
     window: winit::window::Window,
@@ -75,7 +78,8 @@ impl App {
             .with_entry(camera_controller.get_buffer().as_entire_binding())
             .build(&self.render_ctx);
 
-        let renderer = render::Renderer::new(&self.render_ctx, &camera_bind_group_layout);
+        // let renderer = render::Renderer::new(&self.render_ctx, &camera_bind_group_layout);
+        let renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
 
         let mut last_render_time = Instant::now();
         self.event_loop
@@ -98,7 +102,7 @@ impl App {
                     last_render_time = now;
                     camera_controller.update(dt);
                     camera_controller.update_buffer(&self.render_ctx);
-                    renderer.render(&self.render_ctx, &camera_bind_group);
+                    renderer.render(&self.render_ctx);
                 }
                 _ => {}
             });
