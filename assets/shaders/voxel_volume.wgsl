@@ -31,17 +31,16 @@ struct AabbHitInfo {
     distance: f32,
 };
 
-// TODO: Include brickmap base shading table offset
 fn get_shading_offset(p: vec3<i32>) -> u32 {
     let local_index = u32(p.x + p.y * 8 + p.z * 64);
     let bitmask_index = local_index / 32u;
-    var shading_offset = 0u;
+    var map_voxel_idx = 0u;
     for (var i: i32 = 0; i < i32(bitmask_index); i++) {
-        shading_offset += countOneBits(brickmap.bitmask[i]);
+        map_voxel_idx += countOneBits(brickmap.bitmask[i]);
     }
     let extracted_bits = extractBits(brickmap.bitmask[bitmask_index], 0u, (local_index % 32u));
-    shading_offset += countOneBits(extracted_bits);
-    return shading_offset;
+    map_voxel_idx += countOneBits(extracted_bits);
+    return brickmap.shading_table_offset + map_voxel_idx;
 }
 
 fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
