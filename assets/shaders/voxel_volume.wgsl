@@ -1,7 +1,8 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(1) var<storage, read> brickmap: Brickmap;
-@group(0) @binding(2) var<storage, read> shading_table: array<ShadingElement>;
-@group(0) @binding(3) var<uniform> camera: Camera;
+@group(0) @binding(1) var<uniform> world_state: WorldState;
+@group(0) @binding(2) var<storage, read> brickmap_cache: array<Brickmap>;
+@group(0) @binding(3) var<storage, read> shading_table: array<ShadingElement>;
+@group(0) @binding(4) var<uniform> camera: Camera;
 
 struct ShadingElement {
     albedo: u32,
@@ -20,6 +21,11 @@ struct Camera {
     _pad: f32,
 };
 
+struct WorldState {
+    brickmap_cache_dims: vec3<u32>,
+    _pad: u32,
+};
+
 struct HitInfo {
     hit: bool,
     hit_pos: vec3<i32>,
@@ -32,21 +38,37 @@ struct AabbHitInfo {
 };
 
 fn get_shading_offset(p: vec3<i32>) -> u32 {
-    let local_index = u32(p.x + p.y * 8 + p.z * 64);
+    // return 0u;
+
+    // What brickmap are we in?
+    let brickmap_index = (p.x / 8) + (p.y / 8) * 32 + (p.z / 8) * 1024;
+    let local_index = u32((p.x % 8) + (p.y % 8) * 8 + (p.z % 8) * 64);
+    let brickmap = &brickmap_cache[brickmap_index];
     let bitmask_index = local_index / 32u;
     var map_voxel_idx = 0u;
     for (var i: i32 = 0; i < i32(bitmask_index); i++) {
-        map_voxel_idx += countOneBits(brickmap.bitmask[i]);
+        map_voxel_idx += countOneBits((*brickmap).bitmask[i]);
     }
-    let extracted_bits = extractBits(brickmap.bitmask[bitmask_index], 0u, (local_index % 32u));
+    let extracted_bits = extractBits((*brickmap).bitmask[bitmask_index], 0u, (local_index % 32u));
     map_voxel_idx += countOneBits(extracted_bits);
-    return brickmap.shading_table_offset + map_voxel_idx;
+    return (*brickmap).shading_table_offset + map_voxel_idx;
+
+
+    // let local_index = u32(p.x + p.y * 8 + p.z * 64);
+    // let bitmask_index = local_index / 32u;
+    // var map_voxel_idx = 0u;
+    // for (var i: i32 = 0; i < i32(bitmask_index); i++) {
+    //     map_voxel_idx += countOneBits(brickmap.bitmask[i]);
+    // }
+    // let extracted_bits = extractBits(brickmap.bitmask[bitmask_index], 0u, (local_index % 32u));
+    // map_voxel_idx += countOneBits(extracted_bits);
+    // return brickmap.shading_table_offset + map_voxel_idx;
 }
 
 fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
     let ray_dir_inv = 1.0 / ray_dir;
     let t1 = (vec3<f32>(0.0) - ray_pos) * ray_dir_inv;
-    let t2 = (vec3<f32>(8.0) - ray_pos) * ray_dir_inv;
+    let t2 = ((vec3<f32>(8.0) * vec3<f32>(world_state.brickmap_cache_dims)) - ray_pos) * ray_dir_inv;
     let t_min = min(t1, t2);
     let t_max = max(t1, t2);
     let tmin = max(max(t_min.x, 0.0), max(t_min.y, t_min.z));
@@ -55,13 +77,15 @@ fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
 }
 
 fn point_inside_aabb(p: vec3<i32>) -> bool {
-    let clamped = clamp(p, vec3<i32>(0), vec3<i32>(8) - vec3<i32>(1));
+    let max = vec3<i32>(world_state.brickmap_cache_dims) * 8;
+    let clamped = clamp(p, vec3<i32>(0), max - vec3<i32>(1));
     return clamped.x == p.x && clamped.y == p.y && clamped.z == p.z;
 }
 
 fn voxel_hit(p: vec3<i32>) -> bool {
-    let local_index = u32(p.x + p.y * 8 + p.z * 64);
-    return (brickmap.bitmask[local_index / 32u] >> (local_index % 32u) & 1u) != 0u;
+    let brickmap_index = (p.x / 8) + (p.y / 8) * 32 + (p.z / 8) * 1024;
+    let local_index = u32((p.x % 8) + (p.y % 8) * 8 + (p.z % 8) * 64);
+    return (brickmap_cache[brickmap_index].bitmask[local_index / 32u] >> (local_index % 32u) & 1u) != 0u;
 }
 
 fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
@@ -84,7 +108,7 @@ fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
         var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
 
         // TODO: don't hardcode max ray depth
-        for (var i: i32 = 0; i < 64; i++) {
+        for (var i: i32 = 0; i < 2048; i++) {
             if (side_dist.x < side_dist.y) {
                 if (side_dist.x < side_dist.z) {
                     side_dist.x += delta_dist.x;
