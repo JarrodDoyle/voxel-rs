@@ -2,6 +2,7 @@
 @group(0) @binding(1) var<uniform> world_state: WorldState;
 @group(0) @binding(2) var<storage, read> brickmap_cache: array<Brickmap>;
 @group(0) @binding(3) var<storage, read> shading_table: array<ShadingElement>;
+@group(0)
 @group(0) @binding(4) var<uniform> camera: Camera;
 
 struct ShadingElement {
@@ -38,8 +39,6 @@ struct AabbHitInfo {
 };
 
 fn get_shading_offset(p: vec3<i32>) -> u32 {
-    // return 0u;
-
     // What brickmap are we in?
     let brickmap_index = (p.x / 8) + (p.y / 8) * 32 + (p.z / 8) * 1024;
     let local_index = u32((p.x % 8) + (p.y % 8) * 8 + (p.z % 8) * 64);
@@ -52,17 +51,6 @@ fn get_shading_offset(p: vec3<i32>) -> u32 {
     let extracted_bits = extractBits((*brickmap).bitmask[bitmask_index], 0u, (local_index % 32u));
     map_voxel_idx += countOneBits(extracted_bits);
     return (*brickmap).shading_table_offset + map_voxel_idx;
-
-
-    // let local_index = u32(p.x + p.y * 8 + p.z * 64);
-    // let bitmask_index = local_index / 32u;
-    // var map_voxel_idx = 0u;
-    // for (var i: i32 = 0; i < i32(bitmask_index); i++) {
-    //     map_voxel_idx += countOneBits(brickmap.bitmask[i]);
-    // }
-    // let extracted_bits = extractBits(brickmap.bitmask[bitmask_index], 0u, (local_index % 32u));
-    // map_voxel_idx += countOneBits(extracted_bits);
-    // return brickmap.shading_table_offset + map_voxel_idx;
 }
 
 fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
