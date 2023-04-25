@@ -2,7 +2,6 @@
 @group(0) @binding(1) var<uniform> world_state: WorldState;
 @group(0) @binding(2) var<storage, read> brickmap_cache: array<Brickmap>;
 @group(0) @binding(3) var<storage, read> shading_table: array<ShadingElement>;
-@group(0)
 @group(0) @binding(4) var<uniform> camera: Camera;
 
 struct ShadingElement {
@@ -38,10 +37,15 @@ struct AabbHitInfo {
     distance: f32,
 };
 
+// Utility function. Converts a position in 3d to a 1d index.
+fn to_1d_index(p: vec3<i32>, dims: vec3<i32>) -> u32 {
+    return u32(p.x + p.y * dims.x + p.z * dims.x * dims.y);
+}
+
 fn get_shading_offset(p: vec3<i32>) -> u32 {
     // What brickmap are we in?
-    let brickmap_index = (p.x / 8) + (p.y / 8) * 32 + (p.z / 8) * 1024;
-    let local_index = u32((p.x % 8) + (p.y % 8) * 8 + (p.z % 8) * 64);
+    let brickmap_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
+    let local_index = to_1d_index(p % 8, vec3<i32>(8));
     let brickmap = &brickmap_cache[brickmap_index];
     let bitmask_index = local_index / 32u;
     var map_voxel_idx = 0u;
@@ -55,8 +59,8 @@ fn get_shading_offset(p: vec3<i32>) -> u32 {
 
 fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
     let ray_dir_inv = 1.0 / ray_dir;
-    let t1 = (vec3<f32>(0.0) - ray_pos) * ray_dir_inv;
-    let t2 = ((vec3<f32>(8.0) * vec3<f32>(world_state.brickmap_cache_dims)) - ray_pos) * ray_dir_inv;
+    let t1 = -ray_pos * ray_dir_inv;
+    let t2 = (vec3<f32>(8u * world_state.brickmap_cache_dims) - ray_pos) * ray_dir_inv;
     let t_min = min(t1, t2);
     let t_max = max(t1, t2);
     let tmin = max(max(t_min.x, 0.0), max(t_min.y, t_min.z));
@@ -71,9 +75,10 @@ fn point_inside_aabb(p: vec3<i32>) -> bool {
 }
 
 fn voxel_hit(p: vec3<i32>) -> bool {
-    let brickmap_index = (p.x / 8) + (p.y / 8) * 32 + (p.z / 8) * 1024;
-    let local_index = u32((p.x % 8) + (p.y % 8) * 8 + (p.z % 8) * 64);
-    return (brickmap_cache[brickmap_index].bitmask[local_index / 32u] >> (local_index % 32u) & 1u) != 0u;
+    let brickmap_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
+    let local_index = to_1d_index(p % 8, vec3<i32>(8));
+    let bitmask_segment = brickmap_cache[brickmap_index].bitmask[local_index / 32u];
+    return (bitmask_segment >> (local_index % 32u) & 1u) != 0u;
 }
 
 fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
@@ -159,25 +164,24 @@ fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var hit_info = cast_ray(ray_pos, ray_dir);
     var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     if (hit_info.hit){
-        if (hit_info.mask.x) {
-            color.x = 1.0;
-        }
-        else if (hit_info.mask.y) {
-            color.y = 1.0;
-        }
-        else if (hit_info.mask.z) {
-            color.z = 1.0;
-        }
-        else {
-            color = vec4<f32>(1.0);
-        }
+        // if (hit_info.mask.x) {
+        //     color.x = 1.0;
+        // }
+        // else if (hit_info.mask.y) {
+        //     color.y = 1.0;
+        // }
+        // else if (hit_info.mask.z) {
+        //     color.z = 1.0;
+        // }
+        // else {
+        //     color = vec4<f32>(1.0);
+        // }
         let offset = get_shading_offset(hit_info.hit_pos);
         let raw_color = shading_table[offset].albedo;
         color.x = f32((raw_color >> 24u) & 255u) / 255.0;
         color.y = f32((raw_color >> 16u) & 255u) / 255.0;
         color.z = f32((raw_color >> 8u) & 255u) / 255.0;
         color.w = f32(raw_color & 255u) / 255.0;
-        // color = textureLoad(voxels_t, hit_info.hit_pos, 0);
     }
 
     textureStore(output, img_coord, color);
