@@ -31,6 +31,8 @@ struct WorldState {
 pub struct BrickmapManager {
     state_uniform: WorldState,
     state_buffer: wgpu::Buffer,
+    brickgrid: Vec<u32>,
+    brickgrid_buffer: wgpu::Buffer,
     brickmap_cache: Vec<Brickmap>,
     brickmap_buffer: wgpu::Buffer,
     shading_table: Vec<u32>,
@@ -45,11 +47,20 @@ impl BrickmapManager {
         let mut brickmap_cache = Vec::<Brickmap>::with_capacity(32768);
         brickmap_cache.resize(32768, Brickmap::default());
 
+        let mut brickgrid = Vec::<u32>::with_capacity(32768);
+        brickgrid.resize(brickgrid.capacity(), 0);
+
         let device = &context.device;
         let state_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&[state_uniform]),
             usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let brickgrid_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&brickgrid),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
         let brickmap_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -70,6 +81,8 @@ impl BrickmapManager {
         Self {
             state_uniform,
             state_buffer,
+            brickgrid,
+            brickgrid_buffer,
             brickmap_cache,
             brickmap_buffer,
             shading_table,
@@ -83,6 +96,8 @@ impl BrickmapManager {
             .try_into()
             .unwrap();
         let shading_idx = idx * 512;
+        self.brickgrid
+            .splice(idx..idx + 1, [((idx as u32) << 8) + 1]);
         self.brickmap_cache[idx].bitmask = *data;
         self.brickmap_cache[idx].shading_table_offset = shading_idx as u32;
         self.shading_table.splice(
@@ -103,6 +118,15 @@ impl BrickmapManager {
             0,
             bytemuck::cast_slice(&self.shading_table),
         );
+        queue.write_buffer(
+            &self.brickgrid_buffer,
+            0,
+            bytemuck::cast_slice(&self.brickgrid),
+        )
+    }
+
+    pub fn get_brickgrid_buffer(&self) -> &wgpu::Buffer {
+        &self.brickgrid_buffer
     }
 
     pub fn get_worldstate_buffer(&self) -> &wgpu::Buffer {

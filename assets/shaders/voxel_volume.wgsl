@@ -1,8 +1,9 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> world_state: WorldState;
-@group(0) @binding(2) var<storage, read> brickmap_cache: array<Brickmap>;
-@group(0) @binding(3) var<storage, read> shading_table: array<ShadingElement>;
-@group(0) @binding(4) var<uniform> camera: Camera;
+@group(0) @binding(2) var<storage, read> brickgrid: array<u32>;
+@group(0) @binding(3) var<storage, read> brickmap_cache: array<Brickmap>;
+@group(0) @binding(4) var<storage, read> shading_table: array<ShadingElement>;
+@group(0) @binding(5) var<uniform> camera: Camera;
 
 struct ShadingElement {
     albedo: u32,
@@ -75,9 +76,14 @@ fn point_inside_aabb(p: vec3<i32>) -> bool {
 }
 
 fn voxel_hit(p: vec3<i32>) -> bool {
-    let brickmap_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
+    let brickgrid_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
+    let brick_ptr = brickgrid[brickgrid_index];
+    if ((brick_ptr & 1u) == 0u){
+        return false;
+    }
+
     let local_index = to_1d_index(p % 8, vec3<i32>(8));
-    let bitmask_segment = brickmap_cache[brickmap_index].bitmask[local_index / 32u];
+    let bitmask_segment = brickmap_cache[brick_ptr >> 8u].bitmask[local_index / 32u];
     return (bitmask_segment >> (local_index % 32u) & 1u) != 0u;
 }
 

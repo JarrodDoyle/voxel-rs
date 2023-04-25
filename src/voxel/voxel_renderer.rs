@@ -64,6 +64,10 @@ impl VoxelRenderer {
         let sphere_center = glam::vec3(3.5, 3.5, 3.5);
         let sphere_r2 = u32::pow(4, 2) as f32;
         for chunk_idx in 0..32768 {
+            if chunk_idx % 3 == 0 || chunk_idx % 5 == 0 || chunk_idx % 7 == 0 {
+                continue;
+            }
+
             let chunk_pos = glam::uvec3(chunk_idx % 32, (chunk_idx / 32) % 32, chunk_idx / 1024);
             let mut bitmask_data = [0xFFFFFFFF as u32; 16];
             let mut albedo_data = Vec::<u32>::new();
@@ -134,6 +138,15 @@ impl VoxelRenderer {
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
                 wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                None,
+            )
+            .with_entry(
+                wgpu::ShaderStages::COMPUTE,
+                wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
                     min_binding_size: None,
@@ -145,6 +158,7 @@ impl VoxelRenderer {
             .with_layout(&compute_layout)
             .with_entry(wgpu::BindingResource::TextureView(&render_texture.view))
             .with_entry(brickmap_manager.get_worldstate_buffer().as_entire_binding())
+            .with_entry(brickmap_manager.get_brickgrid_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_brickmap_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_shading_buffer().as_entire_binding())
             .with_entry(camera_controller.get_buffer().as_entire_binding())
