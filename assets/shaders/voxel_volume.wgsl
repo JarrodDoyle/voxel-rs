@@ -58,10 +58,15 @@ fn get_shading_offset(p: vec3<i32>) -> u32 {
     return (*brickmap).shading_table_offset + map_voxel_idx;
 }
 
-fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
+fn ray_intersect_aabb(
+    ray_pos: vec3<f32>,
+    ray_dir: vec3<f32>,
+    min: vec3<f32>,
+    max: vec3<f32>
+) -> AabbHitInfo {
     let ray_dir_inv = 1.0 / ray_dir;
-    let t1 = -ray_pos * ray_dir_inv;
-    let t2 = (vec3<f32>(8u * world_state.brickmap_cache_dims) - ray_pos) * ray_dir_inv;
+    let t1 = (min - ray_pos) * ray_dir_inv;
+    let t2 = (max - ray_pos) * ray_dir_inv;
     let t_min = min(t1, t2);
     let t_max = max(t1, t2);
     let tmin = max(max(t_min.x, 0.0), max(t_min.y, t_min.z));
@@ -69,34 +74,37 @@ fn ray_intersect_aabb(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> AabbHitInfo {
     return AabbHitInfo(tmax > tmin, tmin);
 }
 
-fn point_inside_aabb(p: vec3<i32>) -> bool {
-    let max = vec3<i32>(world_state.brickmap_cache_dims) * 8;
-    let clamped = clamp(p, vec3<i32>(0), max - vec3<i32>(1));
+fn point_inside_aabb(p: vec3<i32>, min: vec3<i32>, max: vec3<i32>) -> bool {
+    let clamped = clamp(p, min, max - vec3<i32>(1));
     return clamped.x == p.x && clamped.y == p.y && clamped.z == p.z;
 }
 
-fn voxel_hit(p: vec3<i32>) -> bool {
-    let brickgrid_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
-    let brick_ptr = brickgrid[brickgrid_index];
-    if ((brick_ptr & 1u) == 0u){
-        return false;
-    }
-
+fn voxel_hit(brickmap_idx: u32, p: vec3<i32>) -> bool {
     let local_index = to_1d_index(p % 8, vec3<i32>(8));
-    let bitmask_segment = brickmap_cache[brick_ptr >> 8u].bitmask[local_index / 32u];
+    let bitmask_segment = brickmap_cache[brickmap_idx].bitmask[local_index / 32u];
     return (bitmask_segment >> (local_index % 32u) & 1u) != 0u;
 }
 
-fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
+fn brick_ray_cast(
+    chunk_pos: vec3<i32>,
+    brickmap_idx: u32,
+    orig_ray_pos: vec3<f32>,
+    ray_dir: vec3<f32>
+) -> HitInfo {
     var hit_info = HitInfo(false, vec3<i32>(0), vec3<bool>(false));
 
-    let aabbHit = ray_intersect_aabb(orig_ray_pos, ray_dir);
-    var ray_pos = orig_ray_pos;
+
+    var ray_pos = orig_ray_pos * 8.0;
+
+    let min = vec3<f32>(chunk_pos * 8);
+    let max = min + vec3<f32>(8.0);
+    let aabbHit = ray_intersect_aabb(ray_pos, ray_dir, min, max);
     var tmin = aabbHit.distance;
+
     if (aabbHit.hit) {
         // Accelerate ray
         if (tmin > 0.0) {
-            ray_pos += ray_dir * (tmin - 0.0001);
+            ray_pos += ray_dir * (tmin + 0.0001);
         }
         tmin = max(0.0, tmin);
 
@@ -105,9 +113,20 @@ fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
         let ray_step = vec3<i32>(sign(ray_dir));
         var map_pos = vec3<i32>(floor(ray_pos));
         var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
+        map_pos = map_pos % 8;
 
-        // TODO: don't hardcode max ray depth
-        for (var i: i32 = 0; i < 2048; i++) {
+        let max_brick_depth = 8 * 8 * 8;
+        for (var i: i32 = 0; i < max_brick_depth; i++) {
+            if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(8))) {
+                break;
+            }
+
+            if (voxel_hit(brickmap_idx, map_pos)){
+                hit_info.hit = true;
+                hit_info.hit_pos = map_pos;
+                break;
+            }
+
             if (side_dist.x < side_dist.y) {
                 if (side_dist.x < side_dist.z) {
                     side_dist.x += delta_dist.x;
@@ -132,15 +151,81 @@ fn cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                     hit_info.mask = vec3<bool>(false, false, true);
                 }
             }
+        }
+    }
 
-            if (!point_inside_aabb(map_pos)) {
+    return hit_info;
+}
+
+fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
+    var hit_info = HitInfo(false, vec3<i32>(0), vec3<bool>(false));
+
+    let min = vec3<f32>(0.0);
+    let max = min + vec3<f32>(world_state.brickmap_cache_dims);
+    let aabbHit = ray_intersect_aabb(orig_ray_pos, ray_dir, min, max);
+    var ray_pos = orig_ray_pos;
+    var tmin = aabbHit.distance;
+    if (aabbHit.hit) {
+        // Accelerate ray
+        if (tmin > 0.0) {
+            ray_pos += ray_dir * (tmin + 0.0001);
+        }
+        tmin = max(0.0, tmin);
+
+        // Convert ray_pos into chunk scale
+        // ray_pos /= 8.0;
+
+        // DDA setup
+        let delta_dist = abs(length(ray_dir) / ray_dir);
+        let ray_step = vec3<i32>(sign(ray_dir));
+        var map_pos = vec3<i32>(floor(ray_pos));
+        var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
+
+        let max_grid_depth = i32(length(vec3<f32>(world_state.brickmap_cache_dims)));
+        for (var i: i32 = 0; i < max_grid_depth; i++) {
+            if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(world_state.brickmap_cache_dims))) {
                 break;
             }
 
-            if (voxel_hit(map_pos)) {
-                hit_info.hit = true;
-                hit_info.hit_pos = map_pos;
-                break;
+            let grid_idx = to_1d_index(map_pos, vec3<i32>(world_state.brickmap_cache_dims));
+            let brick_ptr = brickgrid[grid_idx];
+            
+            // If brick pointers loaded flag is set
+            if ((brick_ptr & 1u) == 1u) {
+                let brickmap_idx = brick_ptr >> 8u;
+                let tmp_voxel_hit = brick_ray_cast(map_pos, brickmap_idx, orig_ray_pos, ray_dir);
+
+                if (tmp_voxel_hit.hit == true){
+                    hit_info.hit = tmp_voxel_hit.hit;
+                    hit_info.hit_pos = tmp_voxel_hit.hit_pos + (map_pos * 8);
+                    hit_info.mask = tmp_voxel_hit.mask;
+                    break;
+                }
+            }
+
+            if (side_dist.x < side_dist.y) {
+                if (side_dist.x < side_dist.z) {
+                    side_dist.x += delta_dist.x;
+                    map_pos.x += ray_step.x;
+                    hit_info.mask = vec3<bool>(true, false, false);
+                }
+                else {
+                    side_dist.z += delta_dist.z;
+                    map_pos.z += ray_step.z;
+                    hit_info.mask = vec3<bool>(false, false, true);
+                }
+            }
+            else {
+                if (side_dist.y < side_dist.z) {
+                    side_dist.y += delta_dist.y;
+                    map_pos.y += ray_step.y;
+                    hit_info.mask = vec3<bool>(false, true, false);
+                }
+                else {
+                    side_dist.z += delta_dist.z;
+                    map_pos.z += ray_step.z;
+                    hit_info.mask = vec3<bool>(false, false, true);
+                }
             }
         }
     }
@@ -167,7 +252,7 @@ fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let ray_pos = camera.pos;
 
     // Cast the ray
-    var hit_info = cast_ray(ray_pos, ray_dir);
+    var hit_info = grid_cast_ray(ray_pos, ray_dir);
     var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     if (hit_info.hit){
         // if (hit_info.mask.x) {
