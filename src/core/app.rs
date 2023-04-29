@@ -62,6 +62,8 @@ impl App {
 
         let renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
 
+        let mut cumulative_dt = 0.0;
+        let mut frames_accumulated = 0.0;
         let mut last_render_time = Instant::now();
         self.event_loop
             .run(move |event, _, control_flow| match event {
@@ -84,6 +86,17 @@ impl App {
                     camera_controller.update(dt);
                     camera_controller.update_buffer(&self.render_ctx);
                     renderer.render(&self.render_ctx);
+
+                    // Simple framerate tracking
+                    cumulative_dt += dt.as_secs_f32();
+                    frames_accumulated += 1.0;
+                    if cumulative_dt >= 1.0 {
+                        let fps = frames_accumulated * 1.0 / cumulative_dt;
+                        let frame_time = cumulative_dt * 1000.0 / frames_accumulated;
+                        log::info!("FPS: {}, Frame Time: {}", fps.floor(), frame_time);
+                        cumulative_dt = 0.0;
+                        frames_accumulated = 0.0;
+                    }
                 }
                 _ => {}
             });
