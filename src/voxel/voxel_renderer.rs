@@ -80,9 +80,9 @@ impl VoxelRenderer {
                         if (pos - sphere_center).length_squared() <= sphere_r2 {
                             entry += 1 << idx;
                             let mut albedo = 0u32;
-                            albedo += ((chunk_pos.x + 1) * 8 - 1) << 24;
-                            albedo += ((chunk_pos.y + 1) * 8 - 1) << 16;
-                            albedo += ((chunk_pos.z + 1) * 8 - 1) << 8;
+                            albedo += ((x + 1) * 32 - 1) << 24;
+                            albedo += ((y + 1) * 32 - 1) << 16;
+                            albedo += ((z + 1) * 32 - 1) << 8;
                             albedo += 255;
                             albedo_data.push(albedo);
                         }
