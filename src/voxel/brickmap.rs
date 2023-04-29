@@ -10,16 +10,6 @@ struct Brickmap {
     pub lod_color: u32,
 }
 
-impl Brickmap {
-    pub fn new() -> Self {
-        Self {
-            bitmask: [0; 16],
-            shading_table_offset: 0,
-            lod_color: 0,
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct WorldState {
