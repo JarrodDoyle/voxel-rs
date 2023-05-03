@@ -136,7 +136,7 @@ fn brick_ray_cast(
         var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
         map_pos = map_pos % 8;
 
-        let max_brick_depth = 8 * 8 * 8;
+        let max_brick_depth = 8 + 8 + 8;
         for (var i: i32 = 0; i < max_brick_depth; i++) {
             if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(8))) {
                 break;
@@ -202,7 +202,8 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
         var map_pos = vec3<i32>(floor(ray_pos));
         var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
 
-        let max_grid_depth = i32(length(vec3<f32>(world_state.brickmap_cache_dims)));
+        let dims = world_state.brickmap_cache_dims;
+        let max_grid_depth = i32(dims.x + dims.y + dims.z);
         for (var i: i32 = 0; i < max_grid_depth; i++) {
             if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(world_state.brickmap_cache_dims))) {
                 break;
