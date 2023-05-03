@@ -1,5 +1,3 @@
-use std::future;
-
 use wgpu::util::DeviceExt;
 
 use crate::render;
@@ -102,29 +100,6 @@ impl BrickmapManager {
         }
     }
 
-    // TODO: Ideally this should take a generic voxel format and do the data mapping here
-    pub fn set_data(&mut self, chunk_pos: glam::UVec3, data: &[u32; 16], colours: &[u32]) {
-        let idx: usize = (chunk_pos.x + chunk_pos.y * 32 + chunk_pos.z * 1024)
-            .try_into()
-            .unwrap();
-        let shading_idx = idx * 512;
-        self.brickgrid
-            .splice(idx..idx + 1, [((idx as u32) << 8) + 4]);
-        self.brickmap_cache[idx].bitmask = *data;
-        self.brickmap_cache[idx].shading_table_offset = shading_idx as u32;
-        self.shading_table.splice(
-            shading_idx..(shading_idx + colours.len()),
-            colours.to_owned(),
-        );
-    }
-
-    pub fn set_empty(&mut self, chunk_pos: glam::UVec3) {
-        let idx: usize = (chunk_pos.x + chunk_pos.y * 32 + chunk_pos.z * 1024)
-            .try_into()
-            .unwrap();
-        self.brickgrid.splice(idx..idx + 1, [0]);
-    }
-
     pub fn update_buffer(&self, context: &render::Context) {
         let queue = &context.queue;
         queue.write_buffer(
@@ -197,11 +172,11 @@ impl BrickmapManager {
             let chunk_y = data[i * 4 + 1];
             let chunk_z = data[i * 4 + 2];
 
-            let chunk_pos = glam::uvec3(chunk_x, chunk_y, chunk_z);
-            let chunk_idx = chunk_x + chunk_y * 32 + chunk_z * 1024;
+            let chunk_idx = (chunk_x + chunk_y * 32 + chunk_z * 1024) as usize;
             if chunk_idx % 3 == 0 || chunk_idx % 5 == 0 || chunk_idx % 7 == 0 {
-                self.set_empty(chunk_pos);
+                self.update_brickgrid_element(context, chunk_idx, 0)
             } else {
+                // Build the voxel data
                 let mut bitmask_data = [0xFFFFFFFF as u32; 16];
                 let mut albedo_data = Vec::<u32>::new();
                 for z in 0..8 {
@@ -225,13 +200,45 @@ impl BrickmapManager {
                     bitmask_data[2 * z as usize + 1] =
                         ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
                 }
-                self.set_data(chunk_pos, &bitmask_data, &albedo_data);
+
+                // Update the brickgrid index
+                let brickgrid_element = ((chunk_idx as u32) << 8) + 4;
+                self.update_brickgrid_element(context, chunk_idx, brickgrid_element);
+
+                // Update the shading table
+                let shading_idx = chunk_idx * 512;
+                self.shading_table.splice(
+                    shading_idx..(shading_idx + albedo_data.len()),
+                    albedo_data.clone(),
+                );
+                context.queue.write_buffer(
+                    &self.shading_table_buffer,
+                    (shading_idx * 4) as u64,
+                    bytemuck::cast_slice(&albedo_data),
+                );
+
+                // Update the brickmap
+                self.brickmap_cache[chunk_idx].bitmask = bitmask_data;
+                self.brickmap_cache[chunk_idx].shading_table_offset = shading_idx as u32;
+                context.queue.write_buffer(
+                    &self.brickmap_buffer,
+                    (72 * chunk_idx) as u64,
+                    bytemuck::cast_slice(&[self.brickmap_cache[chunk_idx]]),
+                );
             }
         }
 
         // Reset the request count on the gpu buffer
         let data = &[0, 0, 0, 0];
         context.queue.write_buffer(&self.feedback_buffer, 4, data);
-        self.update_buffer(context);
+    }
+
+    fn update_brickgrid_element(&mut self, context: &render::Context, index: usize, data: u32) {
+        self.brickgrid.splice(index..index + 1, [data]);
+        context.queue.write_buffer(
+            &self.brickgrid_buffer,
+            (index * 4).try_into().unwrap(),
+            bytemuck::cast_slice(&[self.brickgrid[index]]),
+        );
     }
 }
