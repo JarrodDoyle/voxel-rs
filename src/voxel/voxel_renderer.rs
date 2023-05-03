@@ -60,39 +60,7 @@ impl VoxelRenderer {
                 });
 
         log::info!("Creating brickmap manager...");
-        let mut brickmap_manager = super::brickmap::BrickmapManager::new(context);
-        let sphere_center = glam::vec3(3.5, 3.5, 3.5);
-        let sphere_r2 = u32::pow(4, 2) as f32;
-        for chunk_idx in 0..32768 {
-            if chunk_idx % 3 == 0 || chunk_idx % 5 == 0 || chunk_idx % 7 == 0 {
-                continue;
-            }
-
-            let chunk_pos = glam::uvec3(chunk_idx % 32, (chunk_idx / 32) % 32, chunk_idx / 1024);
-            let mut bitmask_data = [0xFFFFFFFF as u32; 16];
-            let mut albedo_data = Vec::<u32>::new();
-            for z in 0..8 {
-                let mut entry = 0u64;
-                for y in 0..8 {
-                    for x in 0..8 {
-                        let idx = x + y * 8;
-                        let pos = glam::vec3(x as f32, y as f32, z as f32);
-                        if (pos - sphere_center).length_squared() <= sphere_r2 {
-                            entry += 1 << idx;
-                            let mut albedo = 0u32;
-                            albedo += ((x + 1) * 32 - 1) << 24;
-                            albedo += ((y + 1) * 32 - 1) << 16;
-                            albedo += ((z + 1) * 32 - 1) << 8;
-                            albedo += 255;
-                            albedo_data.push(albedo);
-                        }
-                    }
-                }
-                bitmask_data[2 * z as usize] = (entry & 0xFFFFFFFF).try_into().unwrap();
-                bitmask_data[2 * z as usize + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
-            }
-            brickmap_manager.set_data(chunk_pos, &bitmask_data, &albedo_data);
-        }
+        let brickmap_manager = super::brickmap::BrickmapManager::new(context);
         brickmap_manager.update_buffer(context);
 
         log::info!("Creating compute pipeline...");
@@ -120,7 +88,7 @@ impl VoxelRenderer {
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
                 wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -139,6 +107,15 @@ impl VoxelRenderer {
                 wgpu::ShaderStages::COMPUTE,
                 wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                None,
+            )
+            .with_entry(
+                wgpu::ShaderStages::COMPUTE,
+                wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -161,6 +138,7 @@ impl VoxelRenderer {
             .with_entry(brickmap_manager.get_brickgrid_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_brickmap_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_shading_buffer().as_entire_binding())
+            .with_entry(brickmap_manager.get_feedback_buffer().as_entire_binding())
             .with_entry(camera_controller.get_buffer().as_entire_binding())
             .build(context);
         let compute_pipeline =
@@ -226,9 +204,19 @@ impl render::Renderer for VoxelRenderer {
 
         drop(render_pass);
 
+        encoder.copy_buffer_to_buffer(
+            self.brickmap_manager.get_feedback_buffer(),
+            0,
+            self.brickmap_manager.get_feedback_result_buffer(),
+            0,
+            self.brickmap_manager.get_feedback_result_buffer().size(),
+        );
+
         context.queue.submit(Some(encoder.finish()));
         frame.present();
     }
 
-    fn update(&self, dt: &Duration, context: &render::Context) {}
+    fn update(&mut self, dt: &Duration, context: &render::Context) {
+        self.brickmap_manager.process_feedback_buffer(context);
+    }
 }

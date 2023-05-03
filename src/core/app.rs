@@ -60,7 +60,7 @@ impl App {
             0.25,
         );
 
-        let renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
+        let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
 
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
@@ -86,6 +86,7 @@ impl App {
                     camera_controller.update(dt);
                     camera_controller.update_buffer(&self.render_ctx);
                     renderer.render(&self.render_ctx);
+                    renderer.update(&dt, &self.render_ctx);
 
                     // Simple framerate tracking
                     cumulative_dt += dt.as_secs_f32();

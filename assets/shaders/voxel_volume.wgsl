@@ -1,9 +1,10 @@
 @group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> world_state: WorldState;
-@group(0) @binding(2) var<storage, read> brickgrid: array<u32>;
+@group(0) @binding(2) var<storage, read_write> brickgrid: array<atomic<u32>>;
 @group(0) @binding(3) var<storage, read> brickmap_cache: array<Brickmap>;
 @group(0) @binding(4) var<storage, read> shading_table: array<ShadingElement>;
-@group(0) @binding(5) var<uniform> camera: Camera;
+@group(0) @binding(5) var<storage, read_write> cpu_feedback: Feedback;
+@group(0) @binding(6) var<uniform> camera: Camera;
 
 struct ShadingElement {
     albedo: u32,
@@ -37,6 +38,26 @@ struct AabbHitInfo {
     hit: bool,
     distance: f32,
 };
+
+struct Feedback {
+    max_count: u32,
+    count: atomic<u32>,
+    _pad1: u32,
+    _pad2: u32,
+    positions: array<vec4<i32>>,
+}
+
+// struct UnpackElement {
+//     pos: vec3<i32>,
+//     cache_idx: u32,
+//     map: Brickmap,
+// }
+
+// struct Unpack {
+//     max_count: u32,
+//     count: u32,
+//     maps: array<UnpackElement>
+// }
 
 // Utility function. Converts a position in 3d to a 1d index.
 fn to_1d_index(p: vec3<i32>, dims: vec3<i32>) -> u32 {
@@ -190,8 +211,32 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
             let grid_idx = to_1d_index(map_pos, vec3<i32>(world_state.brickmap_cache_dims));
             let brick_ptr = brickgrid[grid_idx];
             
-            // If brick pointers loaded flag is set
-            if ((brick_ptr & 1u) == 1u) {
+            // Ptr = 28 bits LOD colour / brickmap index + 4 bits load flags
+            // Flags:
+            // 0 = empty
+            // 1 = unloaded
+            // 2 = loading
+            // 4 = loaded
+            let flags = brick_ptr & 0xFu;
+            if flags == 1u {
+                // Add to the load queue
+                if (atomicLoad(&cpu_feedback.count) < cpu_feedback.max_count) {
+                    if ((atomicOr(&brickgrid[grid_idx], 2u) & 0x2u) == 0u) {
+                        let index = atomicAdd(&cpu_feedback.count, 1u);
+                        if (index < cpu_feedback.max_count) {
+                            cpu_feedback.positions[index] = vec4<i32>(map_pos, 0);
+                        }
+                        else {
+                            atomicSub(&cpu_feedback.count, 1u);
+                            atomicXor(&brickgrid[grid_idx], 2u);
+                        }
+                    }
+                }
+
+                // Set hit info stuff?
+                break;
+            }
+            else if flags == 4u {
                 let brickmap_idx = brick_ptr >> 8u;
                 let tmp_voxel_hit = brick_ray_cast(map_pos, brickmap_idx, orig_ray_pos, ray_dir);
 
