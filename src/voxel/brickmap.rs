@@ -24,6 +24,7 @@ pub struct BrickmapManager {
     brickgrid: Vec<u32>,
     brickgrid_buffer: wgpu::Buffer,
     brickmap_cache: Vec<Brickmap>,
+    brickmap_cache_idx: usize,
     brickmap_buffer: wgpu::Buffer,
     shading_table: Vec<u32>,
     shading_table_buffer: wgpu::Buffer,
@@ -92,6 +93,7 @@ impl BrickmapManager {
             brickgrid,
             brickgrid_buffer,
             brickmap_cache,
+            brickmap_cache_idx: 0,
             brickmap_buffer,
             shading_table,
             shading_table_buffer,
@@ -143,7 +145,7 @@ impl BrickmapManager {
         &self.feedback_result_buffer
     }
 
-    // TODO: this writes the entirety of every buffer. Very slow!
+    // TODO: Implement an upload buffer that's unpacked on shader side
     pub fn process_feedback_buffer(&mut self, context: &render::Context) {
         // Get request count
         let mut slice = self.feedback_result_buffer.slice(0..16);
@@ -202,7 +204,7 @@ impl BrickmapManager {
                 }
 
                 // Update the brickgrid index
-                let brickgrid_element = ((chunk_idx as u32) << 8) + 4;
+                let brickgrid_element = ((self.brickmap_cache_idx as u32) << 8) + 4;
                 self.update_brickgrid_element(context, chunk_idx, brickgrid_element);
 
                 // Update the shading table
@@ -218,19 +220,23 @@ impl BrickmapManager {
                 );
 
                 // Update the brickmap
-                self.brickmap_cache[chunk_idx].bitmask = bitmask_data;
-                self.brickmap_cache[chunk_idx].shading_table_offset = shading_idx as u32;
+                self.brickmap_cache[self.brickmap_cache_idx].bitmask = bitmask_data;
+                self.brickmap_cache[self.brickmap_cache_idx].shading_table_offset =
+                    shading_idx as u32;
                 context.queue.write_buffer(
                     &self.brickmap_buffer,
-                    (72 * chunk_idx) as u64,
-                    bytemuck::cast_slice(&[self.brickmap_cache[chunk_idx]]),
+                    (72 * self.brickmap_cache_idx) as u64,
+                    bytemuck::cast_slice(&[self.brickmap_cache[self.brickmap_cache_idx]]),
                 );
+                self.brickmap_cache_idx += 1;
             }
         }
 
         // Reset the request count on the gpu buffer
         let data = &[0, 0, 0, 0];
         context.queue.write_buffer(&self.feedback_buffer, 4, data);
+
+        log::info!("Num loaded brickmaps: {}", self.brickmap_cache_idx);
     }
 
     fn update_brickgrid_element(&mut self, context: &render::Context, index: usize, data: u32) {
