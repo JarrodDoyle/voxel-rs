@@ -32,15 +32,21 @@ pub struct BrickmapManager {
     feedback_result_buffer: wgpu::Buffer,
 }
 
+// TODO:
+// - Proper shader table bucket management
+// - GPU side unpack buffer rather than uploading each changed brickmap part
+// - Cyclic brickmap cache with unloading
+// - Brickworld system
+// - Move terrain generation to it's own system
 impl BrickmapManager {
     pub fn new(context: &render::Context) -> Self {
         let mut state_uniform = WorldState::default();
         state_uniform.brickmap_cache_dims = [32, 32, 32];
 
-        let mut brickmap_cache = Vec::<Brickmap>::with_capacity(32768);
-        brickmap_cache.resize(32768, Brickmap::default());
+        let mut brickmap_cache = Vec::<Brickmap>::with_capacity(usize::pow(32, 3));
+        brickmap_cache.resize(brickmap_cache.capacity(), Brickmap::default());
 
-        let mut brickgrid = Vec::<u32>::with_capacity(32768);
+        let mut brickgrid = Vec::<u32>::with_capacity(usize::pow(32, 3));
         brickgrid.resize(brickgrid.capacity(), 1);
 
         let device = &context.device;
@@ -64,11 +70,11 @@ impl BrickmapManager {
 
         let shading_table_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[0u32; 25000000]),
+            contents: bytemuck::cast_slice(&[0u32; 100000000]),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        let mut shading_table = Vec::<u32>::with_capacity(25000000);
+        let mut shading_table = Vec::<u32>::with_capacity(100000000);
         shading_table.resize(shading_table.capacity(), 0);
 
         let mut arr = [0u32; 1028];
@@ -145,7 +151,6 @@ impl BrickmapManager {
         &self.feedback_result_buffer
     }
 
-    // TODO: Implement an upload buffer that's unpacked on shader side
     pub fn process_feedback_buffer(&mut self, context: &render::Context) {
         // Get request count
         let mut slice = self.feedback_result_buffer.slice(0..16);
