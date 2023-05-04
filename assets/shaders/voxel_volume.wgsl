@@ -66,9 +66,11 @@ fn to_1d_index(p: vec3<i32>, dims: vec3<i32>) -> u32 {
 
 fn get_shading_offset(p: vec3<i32>) -> u32 {
     // What brickmap are we in?
-    let brickmap_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
+    let brickgrid_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
+    let brick_ptr = brickgrid[brickgrid_index];
+    let brickmap = &brickmap_cache[brick_ptr >> 8u];
+
     let local_index = to_1d_index(p % 8, vec3<i32>(8));
-    let brickmap = &brickmap_cache[brickmap_index];
     let bitmask_index = local_index / 32u;
     var map_voxel_idx = 0u;
     for (var i: i32 = 0; i < i32(bitmask_index); i++) {
