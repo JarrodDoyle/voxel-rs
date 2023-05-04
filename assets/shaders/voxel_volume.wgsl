@@ -147,30 +147,19 @@ fn brick_ray_cast(
                 break;
             }
 
-            if (side_dist.x < side_dist.y) {
-                if (side_dist.x < side_dist.z) {
-                    side_dist.x += delta_dist.x;
-                    map_pos.x += ray_step.x;
-                    hit_info.mask = vec3<bool>(true, false, false);
-                }
-                else {
-                    side_dist.z += delta_dist.z;
-                    map_pos.z += ray_step.z;
-                    hit_info.mask = vec3<bool>(false, false, true);
-                }
+            let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
+            if (smallest == side_dist.x) {
+                hit_info.mask = vec3<bool>(true, false, false);
+            }
+            else if (smallest == side_dist.y) {
+                hit_info.mask = vec3<bool>(false, true, false);
             }
             else {
-                if (side_dist.y < side_dist.z) {
-                    side_dist.y += delta_dist.y;
-                    map_pos.y += ray_step.y;
-                    hit_info.mask = vec3<bool>(false, true, false);
-                }
-                else {
-                    side_dist.z += delta_dist.z;
-                    map_pos.z += ray_step.z;
-                    hit_info.mask = vec3<bool>(false, false, true);
-                }
+                hit_info.mask = vec3<bool>(false, false, true);
             }
+
+            side_dist += vec3<f32>(hit_info.mask) * delta_dist;
+            map_pos += vec3<i32>(hit_info.mask) * ray_step;
         }
     }
 
@@ -248,30 +237,19 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                 }
             }
 
-            if (side_dist.x < side_dist.y) {
-                if (side_dist.x < side_dist.z) {
-                    side_dist.x += delta_dist.x;
-                    map_pos.x += ray_step.x;
-                    hit_info.mask = vec3<bool>(true, false, false);
-                }
-                else {
-                    side_dist.z += delta_dist.z;
-                    map_pos.z += ray_step.z;
-                    hit_info.mask = vec3<bool>(false, false, true);
-                }
+            let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
+            if (smallest == side_dist.x) {
+                hit_info.mask = vec3<bool>(true, false, false);
+            }
+            else if (smallest == side_dist.y) {
+                hit_info.mask = vec3<bool>(false, true, false);
             }
             else {
-                if (side_dist.y < side_dist.z) {
-                    side_dist.y += delta_dist.y;
-                    map_pos.y += ray_step.y;
-                    hit_info.mask = vec3<bool>(false, true, false);
-                }
-                else {
-                    side_dist.z += delta_dist.z;
-                    map_pos.z += ray_step.z;
-                    hit_info.mask = vec3<bool>(false, false, true);
-                }
+                hit_info.mask = vec3<bool>(false, false, true);
             }
+
+            side_dist += vec3<f32>(hit_info.mask) * delta_dist;
+            map_pos += vec3<i32>(hit_info.mask) * ray_step;
         }
     }
 
