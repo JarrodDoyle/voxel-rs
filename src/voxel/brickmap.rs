@@ -211,7 +211,7 @@ impl BrickmapManager {
                 self.update_brickgrid_element(context, chunk_idx, brickgrid_element);
 
                 // Update the shading table
-                let shading_idx = chunk_idx * 512;
+                let shading_idx = self.brickmap_cache_idx * 512;
                 self.shading_table.splice(
                     shading_idx..(shading_idx + albedo_data.len()),
                     albedo_data.clone(),
