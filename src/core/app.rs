@@ -28,7 +28,15 @@ impl App {
             .build(&event_loop)
             .unwrap();
 
-        let render_ctx = render::Context::new(&window).await;
+        let render_ctx = render::Context::new(
+            &window,
+            wgpu::Limits {
+                max_storage_buffer_binding_size: 1 << 29,
+                max_buffer_size: 1 << 29,
+                ..Default::default()
+            },
+        )
+        .await;
 
         Self {
             window,

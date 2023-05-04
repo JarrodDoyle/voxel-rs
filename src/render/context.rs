@@ -11,7 +11,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(window: &Window, limits: wgpu::Limits) -> Self {
         log::info!("Initialising WGPU context...");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -42,7 +42,7 @@ impl Context {
                 &wgpu::DeviceDescriptor {
                     label: None,
                     features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
+                    limits,
                 },
                 None,
             )
