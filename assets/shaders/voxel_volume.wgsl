@@ -31,6 +31,7 @@ struct WorldState {
 struct HitInfo {
     hit: bool,
     hit_pos: vec3<i32>,
+    brickmap_idx: u32,
     mask: vec3<bool>,
 };
 
@@ -64,13 +65,9 @@ fn to_1d_index(p: vec3<i32>, dims: vec3<i32>) -> u32 {
     return u32(p.x + p.y * dims.x + p.z * dims.x * dims.y);
 }
 
-fn get_shading_offset(p: vec3<i32>) -> u32 {
-    // What brickmap are we in?
-    let brickgrid_index = to_1d_index(p / 8, vec3<i32>(world_state.brickmap_cache_dims));
-    let brick_ptr = brickgrid[brickgrid_index];
-    let brickmap = &brickmap_cache[brick_ptr >> 8u];
-
-    let local_index = to_1d_index(p % 8, vec3<i32>(8));
+fn get_shading_offset(hit: HitInfo) -> u32 {
+    let brickmap = &brickmap_cache[hit.brickmap_idx];
+    let local_index = to_1d_index(hit.hit_pos % 8, vec3<i32>(8));
     let bitmask_index = local_index / 32u;
     var map_voxel_idx = 0u;
     for (var i: i32 = 0; i < i32(bitmask_index); i++) {
@@ -114,8 +111,7 @@ fn brick_ray_cast(
     orig_ray_pos: vec3<f32>,
     ray_dir: vec3<f32>
 ) -> HitInfo {
-    var hit_info = HitInfo(false, vec3<i32>(0), vec3<bool>(false));
-
+    var hit_info = HitInfo(false, vec3<i32>(0), 0u, vec3<bool>(false));
 
     var ray_pos = orig_ray_pos * 8.0;
 
@@ -147,6 +143,7 @@ fn brick_ray_cast(
             if (voxel_hit(brickmap_idx, map_pos)){
                 hit_info.hit = true;
                 hit_info.hit_pos = map_pos;
+                hit_info.brickmap_idx = brickmap_idx;
                 break;
             }
 
@@ -181,7 +178,7 @@ fn brick_ray_cast(
 }
 
 fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
-    var hit_info = HitInfo(false, vec3<i32>(0), vec3<bool>(false));
+    var hit_info = HitInfo(false, vec3<i32>(0), 0u, vec3<bool>(false));
 
     let min = vec3<f32>(0.0);
     let max = min + vec3<f32>(world_state.brickmap_cache_dims);
@@ -315,7 +312,7 @@ fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // else {
         //     color = vec4<f32>(1.0);
         // }
-        let offset = get_shading_offset(hit_info.hit_pos);
+        let offset = get_shading_offset(hit_info);
         let raw_color = shading_table[offset].albedo;
         color.x = f32((raw_color >> 24u) & 255u) / 255.0;
         color.y = f32((raw_color >> 16u) & 255u) / 255.0;
