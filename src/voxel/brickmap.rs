@@ -167,6 +167,7 @@ impl BrickmapManager {
         self.feedback_result_buffer.unmap();
 
         // Generate a sphere of voxels
+        let world_dims = self.state_uniform.brickmap_cache_dims;
         let sphere_center = glam::vec3(3.5, 3.5, 3.5);
         let sphere_r2 = u32::pow(4, 2) as f32;
         for i in 0..request_count {
@@ -174,7 +175,9 @@ impl BrickmapManager {
             let chunk_y = data[i * 4 + 1];
             let chunk_z = data[i * 4 + 2];
 
-            let chunk_idx = (chunk_x + chunk_y * 32 + chunk_z * 1024) as usize;
+            let chunk_idx = (chunk_x
+                + chunk_y * world_dims[0]
+                + chunk_z * world_dims[0] * world_dims[1]) as usize;
             if chunk_idx % 3 == 0 || chunk_idx % 5 == 0 || chunk_idx % 7 == 0 {
                 self.update_brickgrid_element(context, chunk_idx, 0)
             } else {
