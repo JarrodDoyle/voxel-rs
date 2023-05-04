@@ -100,7 +100,10 @@ fn point_inside_aabb(p: vec3<i32>, min: vec3<i32>, max: vec3<i32>) -> bool {
 }
 
 fn voxel_hit(brickmap_idx: u32, p: vec3<i32>) -> bool {
+    // Convert the global position into an index within the brickmap
     let local_index = to_1d_index(p % 8, vec3<i32>(8));
+
+    // Is the bit at local_index within the bitmask a 1?
     let bitmask_segment = brickmap_cache[brickmap_idx].bitmask[local_index / 32u];
     return (bitmask_segment >> (local_index % 32u) & 1u) != 0u;
 }
@@ -121,11 +124,11 @@ fn brick_ray_cast(
     var tmin = aabbHit.distance;
 
     if (aabbHit.hit) {
-        // Accelerate ray
+        // tmin is greater than 0 if the ray is outside of the AABB, so we need to
+        // accelerate the ray to be on the edge of the AABB.
         if (tmin > 0.0) {
             ray_pos += ray_dir * (tmin + 0.0001);
         }
-        tmin = max(0.0, tmin);
 
         // DDA setup
         let delta_dist = abs(length(ray_dir) / ray_dir);
@@ -137,6 +140,8 @@ fn brick_ray_cast(
         let max_brick_depth = 8 + 8 + 8;
         for (var i: i32 = 0; i < max_brick_depth; i++) {
             if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(8))) {
+                // If the ray has left the brickmap AABB there's no point in continuing
+                // to trace against it
                 break;
             }
 
@@ -147,6 +152,7 @@ fn brick_ray_cast(
                 break;
             }
 
+            // What side of the voxel are we on?
             let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
             if (smallest == side_dist.x) {
                 hit_info.mask = vec3<bool>(true, false, false);
@@ -158,6 +164,7 @@ fn brick_ray_cast(
                 hit_info.mask = vec3<bool>(false, false, true);
             }
 
+            // Step the ray based on which voxel side we're on
             side_dist += vec3<f32>(hit_info.mask) * delta_dist;
             map_pos += vec3<i32>(hit_info.mask) * ray_step;
         }
@@ -175,14 +182,11 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
     var ray_pos = orig_ray_pos;
     var tmin = aabbHit.distance;
     if (aabbHit.hit) {
-        // Accelerate ray
+        // tmin is greater than 0 if the ray is outside of the AABB, so we need to
+        // accelerate the ray to be on the edge of the AABB.
         if (tmin > 0.0) {
             ray_pos += ray_dir * (tmin + 0.0001);
         }
-        tmin = max(0.0, tmin);
-
-        // Convert ray_pos into chunk scale
-        // ray_pos /= 8.0;
 
         // DDA setup
         let delta_dist = abs(length(ray_dir) / ray_dir);
@@ -194,6 +198,8 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
         let max_grid_depth = i32(dims.x + dims.y + dims.z);
         for (var i: i32 = 0; i < max_grid_depth; i++) {
             if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(world_state.brickmap_cache_dims))) {
+                // If the ray has left the brickmap AABB there's no point in continuing
+                // to trace against it
                 break;
             }
 
@@ -208,9 +214,15 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
             // 4 = loaded
             let flags = brick_ptr & 0xFu;
             if flags == 1u {
-                // Add to the load queue
+                // The brickmap we're in is currently unloaded so we'll try and add it
+                // to the load queue. Heavy atomic use here because multiple shader
+                // dispatches might be trying to add the same brickmap
                 if (atomicLoad(&cpu_feedback.count) < cpu_feedback.max_count) {
+                    // This is checking that in the time since the flags were calculated
+                    // another dispatch hasn't already started loading the brickmap
                     if ((atomicOr(&brickgrid[grid_idx], 2u) & 0x2u) == 0u) {
+                        // If there's still space in the queue at this point, add the
+                        // brickmap. Otherwise, revert any changes made
                         let index = atomicAdd(&cpu_feedback.count, 1u);
                         if (index < cpu_feedback.max_count) {
                             cpu_feedback.positions[index] = vec4<i32>(map_pos, 0);
@@ -222,13 +234,15 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                     }
                 }
 
-                // Set hit info stuff?
+                // TODO: Set hit info stuff?
                 break;
             }
             else if flags == 4u {
+                // The brickmap is loaded so we try and cast against it
                 let brickmap_idx = brick_ptr >> 8u;
                 let tmp_voxel_hit = brick_ray_cast(map_pos, brickmap_idx, orig_ray_pos, ray_dir);
 
+                // If we hit a voxel in the brickmap, update hitinfo and stop casting
                 if (tmp_voxel_hit.hit == true){
                     hit_info.hit = tmp_voxel_hit.hit;
                     hit_info.hit_pos = tmp_voxel_hit.hit_pos + (map_pos * 8);
@@ -237,6 +251,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                 }
             }
 
+            // What side of the voxel are we on?
             let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
             if (smallest == side_dist.x) {
                 hit_info.mask = vec3<bool>(true, false, false);
@@ -248,6 +263,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                 hit_info.mask = vec3<bool>(false, false, true);
             }
 
+            // Step the ray based on which voxel side we're on
             side_dist += vec3<f32>(hit_info.mask) * delta_dist;
             map_pos += vec3<i32>(hit_info.mask) * ray_step;
         }
