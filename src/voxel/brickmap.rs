@@ -186,29 +186,68 @@ impl BrickmapManager {
             if chunk_idx % 3 == 0 || chunk_idx % 5 == 0 || chunk_idx % 7 == 0 {
                 self.update_brickgrid_element(context, chunk_idx, 0)
             } else {
-                // Build the voxel data
-                let mut bitmask_data = [0xFFFFFFFF as u32; 16];
-                let mut albedo_data = Vec::<u32>::new();
+                // Generate full data
+                let mut chunk = [(false, 0u32); 512];
                 for z in 0..8 {
-                    let mut entry = 0u64;
                     for y in 0..8 {
                         for x in 0..8 {
-                            let idx = x + y * 8;
+                            let idx = (x + y * 8 + z * 8 * 8) as usize;
+
+                            // Just checks if the point is in the sphere
                             let pos = glam::vec3(x as f32, y as f32, z as f32);
                             if (pos - sphere_center).length_squared() <= sphere_r2 {
-                                entry += 1 << idx;
+                                // Pack the local position as a colour
                                 let mut albedo = 0u32;
                                 albedo += ((x + 1) * 32 - 1) << 24;
                                 albedo += ((y + 1) * 32 - 1) << 16;
                                 albedo += ((z + 1) * 32 - 1) << 8;
                                 albedo += 255;
-                                albedo_data.push(albedo);
+                                chunk[idx] = (true, albedo);
                             }
                         }
                     }
-                    bitmask_data[2 * z as usize] = (entry & 0xFFFFFFFF).try_into().unwrap();
-                    bitmask_data[2 * z as usize + 1] =
-                        ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
+                }
+
+                // Cull interior voxels
+                let mut bitmask_data = [0xFFFFFFFF as u32; 16];
+                let mut albedo_data = Vec::<u32>::new();
+                for z in 0..8 {
+                    // Each z level contains two bitmask segments of voxels
+                    let mut entry = 0u64;
+                    for y in 0..8 {
+                        for x in 0..8 {
+                            // Ignore non-solids
+                            let idx = x + y * 8 + z * 8 * 8;
+                            if !chunk[idx].0 {
+                                continue;
+                            }
+
+                            // A voxel is on the surface if at least one of it's
+                            // cardinal neighbours is non-solid. Also for simplicity if
+                            // it's on the edge of the chunk
+                            let surface_voxel: bool;
+                            if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
+                                surface_voxel = true;
+                            } else {
+                                surface_voxel = !(chunk[idx + 1].0
+                                    && chunk[idx - 1].0
+                                    && chunk[idx + 8].0
+                                    && chunk[idx - 8].0
+                                    && chunk[idx + 64].0
+                                    && chunk[idx - 64].0);
+                            }
+
+                            // Set the appropriate bit in the z entry and add the shading
+                            // data
+                            if surface_voxel {
+                                entry += 1 << (x + y * 8);
+                                albedo_data.push(chunk[idx].1);
+                            }
+                        }
+                    }
+                    let offset = 2 * z as usize;
+                    bitmask_data[offset] = (entry & 0xFFFFFFFF).try_into().unwrap();
+                    bitmask_data[offset + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
                 }
 
                 // Update the brickgrid index
