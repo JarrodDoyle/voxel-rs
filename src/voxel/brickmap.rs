@@ -69,16 +69,15 @@ impl BrickmapManager {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
+        let shading_table_allocator = ShadingTableAllocator::new(4, u32::pow(2, 24));
+        let shading_table_element_count = shading_table_allocator.total_elements as usize;
+        let mut shading_table = Vec::<u32>::with_capacity(shading_table_element_count);
+        shading_table.resize(shading_table.capacity(), 0);
         let shading_table_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[0u32; 100000000]),
+            contents: bytemuck::cast_slice(&shading_table),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
-
-        let mut shading_table = Vec::<u32>::with_capacity(100000000);
-        shading_table.resize(shading_table.capacity(), 0);
-
-        let shading_table_allocator = ShadingTableAllocator::new(4, u32::pow(2, 24));
 
         let mut arr = [0u32; 1028];
         arr[0] = 256;
