@@ -313,7 +313,7 @@ struct ShadingBucket {
 }
 
 impl ShadingBucket {
-    pub fn new(global_offset: u32, slot_count: u32, slot_size: u32) -> Self {
+    fn new(global_offset: u32, slot_count: u32, slot_size: u32) -> Self {
         let mut free = Vec::with_capacity(slot_count as usize);
         for i in (0..slot_count).rev() {
             free.push(i);
@@ -329,13 +329,13 @@ impl ShadingBucket {
         }
     }
 
-    pub fn contains_address(&self, address: u32) -> bool {
+    fn contains_address(&self, address: u32) -> bool {
         let min = self.global_offset;
         let max = min + self.slot_count * self.slot_size;
         return min <= address && address < max;
     }
 
-    pub fn try_alloc(&mut self) -> Option<u32> {
+    fn try_alloc(&mut self) -> Option<u32> {
         // Mark the first free index as used
         let bucket_index = self.free.pop()?;
         self.used.push(bucket_index);
@@ -345,7 +345,7 @@ impl ShadingBucket {
         return Some(address);
     }
 
-    pub fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {
+    fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {
         if !self.contains_address(address) {
             return Err("Address is not within bucket range.");
         }
@@ -378,7 +378,7 @@ struct ShadingTableAllocator {
 }
 
 impl ShadingTableAllocator {
-    pub fn new(bucket_count: u32, elements_per_bucket: u32) -> Self {
+    fn new(bucket_count: u32, elements_per_bucket: u32) -> Self {
         let total_elements = bucket_count * elements_per_bucket;
         let used_elements = 0;
 
@@ -406,7 +406,7 @@ impl ShadingTableAllocator {
         }
     }
 
-    pub fn try_alloc(&mut self, size: u32) -> Option<u32> {
+    fn try_alloc(&mut self, size: u32) -> Option<u32> {
         for i in 0..self.bucket_count as usize {
             let bucket = &mut self.buckets[i];
             if bucket.slot_size < size {
@@ -429,7 +429,7 @@ impl ShadingTableAllocator {
         None
     }
 
-    pub fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {
+    fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {
         let bucket_idx = address / self.elements_per_bucket;
         let bucket = &mut self.buckets[bucket_idx as usize];
         self.used_elements -= bucket.slot_size;
