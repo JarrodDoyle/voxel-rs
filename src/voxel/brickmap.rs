@@ -34,7 +34,6 @@ pub struct BrickmapManager {
 }
 
 // TODO:
-// - Proper shader table bucket management
 // - GPU side unpack buffer rather than uploading each changed brickmap part
 // - Cyclic brickmap cache with unloading
 // - Brickworld system
@@ -262,7 +261,6 @@ impl BrickmapManager {
                     .shading_table_allocator
                     .try_alloc(albedo_data.len() as u32)
                     .unwrap() as usize;
-                // let shading_idx = self.brickmap_cache_idx * 512;
                 self.shading_table.splice(
                     shading_idx..(shading_idx + albedo_data.len()),
                     albedo_data.clone(),
