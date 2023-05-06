@@ -247,6 +247,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                     hit_info.hit = tmp_voxel_hit.hit;
                     hit_info.hit_pos = tmp_voxel_hit.hit_pos + (map_pos * 8);
                     hit_info.mask = tmp_voxel_hit.mask;
+                    hit_info.brickmap_idx = tmp_voxel_hit.brickmap_idx;
                     break;
                 }
             }
