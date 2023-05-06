@@ -229,6 +229,12 @@ impl BrickmapManager {
                 + chunk_y * world_dims[0]
                 + chunk_z * world_dims[0] * world_dims[1]) as usize;
 
+            // Don't upload it if it's empty
+            if albedo_data.is_empty() {
+                self.update_brickgrid_element(context, chunk_idx, 0);
+                continue;
+            }
+
             // Update the brickgrid index
             let brickgrid_element = ((self.brickmap_cache_idx as u32) << 8) + 4;
             self.update_brickgrid_element(context, chunk_idx, brickgrid_element);
