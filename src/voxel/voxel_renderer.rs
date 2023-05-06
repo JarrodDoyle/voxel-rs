@@ -61,7 +61,6 @@ impl VoxelRenderer {
 
         log::info!("Creating brickmap manager...");
         let brickmap_manager = super::brickmap::BrickmapManager::new(context);
-        brickmap_manager.update_buffer(context);
 
         log::info!("Creating compute pipeline...");
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");

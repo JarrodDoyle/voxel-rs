@@ -108,20 +108,6 @@ impl BrickmapManager {
         }
     }
 
-    pub fn update_buffer(&self, context: &render::Context) {
-        let queue = &context.queue;
-        queue.write_buffer(
-            &self.brickmap_buffer,
-            0,
-            bytemuck::cast_slice(&self.brickmap_cache),
-        );
-        queue.write_buffer(
-            &self.brickgrid_buffer,
-            0,
-            bytemuck::cast_slice(&self.brickgrid),
-        )
-    }
-
     pub fn get_brickgrid_buffer(&self) -> &wgpu::Buffer {
         &self.brickgrid_buffer
     }
