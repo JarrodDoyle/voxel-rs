@@ -26,7 +26,6 @@ pub struct BrickmapManager {
     brickmap_cache: Vec<Brickmap>,
     brickmap_cache_idx: usize,
     brickmap_buffer: wgpu::Buffer,
-    shading_table: Vec<u32>,
     shading_table_buffer: wgpu::Buffer,
     shading_table_allocator: ShadingTableAllocator,
     feedback_buffer: wgpu::Buffer,
@@ -102,7 +101,6 @@ impl BrickmapManager {
             brickmap_cache,
             brickmap_cache_idx: 0,
             brickmap_buffer,
-            shading_table,
             shading_table_buffer,
             shading_table_allocator,
             feedback_buffer,
@@ -116,11 +114,6 @@ impl BrickmapManager {
             &self.brickmap_buffer,
             0,
             bytemuck::cast_slice(&self.brickmap_cache),
-        );
-        queue.write_buffer(
-            &self.shading_table_buffer,
-            0,
-            bytemuck::cast_slice(&self.shading_table),
         );
         queue.write_buffer(
             &self.brickgrid_buffer,
@@ -261,10 +254,6 @@ impl BrickmapManager {
                     .shading_table_allocator
                     .try_alloc(albedo_data.len() as u32)
                     .unwrap() as usize;
-                self.shading_table.splice(
-                    shading_idx..(shading_idx + albedo_data.len()),
-                    albedo_data.clone(),
-                );
                 context.queue.write_buffer(
                     &self.shading_table_buffer,
                     (shading_idx * 4) as u64,
