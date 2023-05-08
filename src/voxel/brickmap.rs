@@ -161,6 +161,21 @@ impl BrickmapManager {
             let chunk_y = data[i * 4 + 1];
             let chunk_z = data[i * 4 + 2];
 
+            let noise_vals = simdnoise::NoiseBuilder::fbm_3d_offset(
+                chunk_x as f32 * 8.0,
+                8,
+                chunk_y as f32 * 8.0,
+                8,
+                chunk_z as f32 * 8.0,
+                8,
+            )
+            .with_seed(0)
+            .with_freq(0.005)
+            .with_octaves(3)
+            .with_gain(0.5)
+            .with_lacunarity(2.0)
+            .generate();
+
             // Generate full data
             let mut chunk = [(false, 0u32); 512];
             for z in 0..8 {
@@ -168,10 +183,8 @@ impl BrickmapManager {
                     for x in 0..8 {
                         let idx = (x + y * 8 + z * 8 * 8) as usize;
 
-                        // Just checks if the point is in the sphere
-                        let pos = glam::vec3(x as f32, y as f32, z as f32);
-                        if (pos - sphere_center).length_squared() <= sphere_r2 {
-                            // Pack the local position as a colour
+                        let val = noise_vals.0[idx];
+                        if val > 0.0 {
                             let mut albedo = 0u32;
                             albedo += ((x + 1) * 32 - 1) << 24;
                             albedo += ((y + 1) * 32 - 1) << 16;
