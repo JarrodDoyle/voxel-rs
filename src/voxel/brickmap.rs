@@ -36,7 +36,6 @@ pub struct BrickmapManager {
 // - GPU side unpack buffer rather than uploading each changed brickmap part
 // - Cyclic brickmap cache with unloading
 // - Brickworld system
-// - Move terrain generation to it's own system
 impl BrickmapManager {
     pub fn new(context: &render::Context) -> Self {
         let mut state_uniform = WorldState::default();
@@ -132,7 +131,11 @@ impl BrickmapManager {
         &self.feedback_result_buffer
     }
 
-    pub fn process_feedback_buffer(&mut self, context: &render::Context) {
+    pub fn process_feedback_buffer(
+        &mut self,
+        context: &render::Context,
+        world: &mut super::world::WorldManager,
+    ) {
         // Get request count
         let mut slice = self.feedback_result_buffer.slice(0..16);
         slice.map_async(wgpu::MapMode::Read, |_| {});
@@ -154,47 +157,15 @@ impl BrickmapManager {
 
         // Generate a sphere of voxels
         let world_dims = self.state_uniform.brickmap_cache_dims;
-        let sphere_center = glam::vec3(3.5, 3.5, 3.5);
-        let sphere_r2 = u32::pow(4, 2) as f32;
         for i in 0..request_count {
             let chunk_x = data[i * 4];
             let chunk_y = data[i * 4 + 1];
             let chunk_z = data[i * 4 + 2];
 
-            let noise_vals = simdnoise::NoiseBuilder::fbm_3d_offset(
-                chunk_x as f32 * 8.0,
-                8,
-                chunk_y as f32 * 8.0,
-                8,
-                chunk_z as f32 * 8.0,
-                8,
-            )
-            .with_seed(0)
-            .with_freq(0.005)
-            .with_octaves(3)
-            .with_gain(0.5)
-            .with_lacunarity(2.0)
-            .generate();
-
-            // Generate full data
-            let mut chunk = [(false, 0u32); 512];
-            for z in 0..8 {
-                for y in 0..8 {
-                    for x in 0..8 {
-                        let idx = (x + y * 8 + z * 8 * 8) as usize;
-
-                        let val = noise_vals.0[idx];
-                        if val > 0.0 {
-                            let mut albedo = 0u32;
-                            albedo += ((x + 1) * 32 - 1) << 24;
-                            albedo += ((y + 1) * 32 - 1) << 16;
-                            albedo += ((z + 1) * 32 - 1) << 8;
-                            albedo += 255;
-                            chunk[idx] = (true, albedo);
-                        }
-                    }
-                }
-            }
+            let chunk_pos = glam::ivec3(0, 0, 0);
+            let block_pos = glam::uvec3(chunk_x, chunk_y, chunk_z);
+            let block = world.get_block(chunk_pos, block_pos);
+            assert_eq!(block.len(), 512);
 
             // Cull interior voxels
             let mut bitmask_data = [0xFFFFFFFF as u32; 16];
@@ -206,30 +177,37 @@ impl BrickmapManager {
                     for x in 0..8 {
                         // Ignore non-solids
                         let idx = x + y * 8 + z * 8 * 8;
-                        if !chunk[idx].0 {
-                            continue;
-                        }
+                        let empty_voxel = super::world::Voxel::Empty;
 
-                        // A voxel is on the surface if at least one of it's
-                        // cardinal neighbours is non-solid. Also for simplicity if
-                        // it's on the edge of the chunk
-                        let surface_voxel: bool;
-                        if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
-                            surface_voxel = true;
-                        } else {
-                            surface_voxel = !(chunk[idx + 1].0
-                                && chunk[idx - 1].0
-                                && chunk[idx + 8].0
-                                && chunk[idx - 8].0
-                                && chunk[idx + 64].0
-                                && chunk[idx - 64].0);
-                        }
+                        match block[idx] {
+                            super::world::Voxel::Empty => continue,
+                            super::world::Voxel::Color(r, g, b) => {
+                                // A voxel is on the surface if at least one of it's
+                                // cardinal neighbours is non-solid. Also for simplicity
+                                // if it's on the edge of the chunk
+                                let surface_voxel: bool;
+                                if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
+                                    surface_voxel = true;
+                                } else {
+                                    surface_voxel = !(block[idx + 1] == empty_voxel
+                                        && block[idx - 1] == empty_voxel
+                                        && block[idx + 8] == empty_voxel
+                                        && block[idx - 8] == empty_voxel
+                                        && block[idx + 64] == empty_voxel
+                                        && block[idx - 64] == empty_voxel);
+                                }
 
-                        // Set the appropriate bit in the z entry and add the shading
-                        // data
-                        if surface_voxel {
-                            entry += 1 << (x + y * 8);
-                            albedo_data.push(chunk[idx].1);
+                                // Set the appropriate bit in the z entry and add the
+                                // shading data
+                                if surface_voxel {
+                                    entry += 1 << (x + y * 8);
+                                    let albedo = ((r as u32) << 24)
+                                        + ((g as u32) << 16)
+                                        + ((b as u32) << 8)
+                                        + 255u32;
+                                    albedo_data.push(albedo);
+                                }
+                            }
                         }
                     }
                 }

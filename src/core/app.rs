@@ -68,6 +68,14 @@ impl App {
             0.25,
         );
 
+        let mut world = voxel::world::WorldManager::new(voxel::world::GenerationSettings {
+            seed: 0,
+            frequency: 0.04,
+            octaves: 3,
+            gain: 0.5,
+            lacunarity: 2.0,
+        });
+
         let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
 
         let mut cumulative_dt = 0.0;
@@ -95,6 +103,7 @@ impl App {
                     camera_controller.update_buffer(&self.render_ctx);
                     renderer.render(&self.render_ctx);
                     renderer.update(&dt, &self.render_ctx);
+                    renderer.update_brickmap(&self.render_ctx, &mut world);
 
                     // Simple framerate tracking
                     cumulative_dt += dt.as_secs_f32();

@@ -215,7 +215,16 @@ impl render::Renderer for VoxelRenderer {
         frame.present();
     }
 
-    fn update(&mut self, dt: &Duration, context: &render::Context) {
-        self.brickmap_manager.process_feedback_buffer(context);
+    fn update(&mut self, _dt: &Duration, _context: &render::Context) {}
+}
+
+impl VoxelRenderer {
+    pub fn update_brickmap(
+        &mut self,
+        context: &render::Context,
+        world: &mut super::world::WorldManager,
+    ) {
+        self.brickmap_manager
+            .process_feedback_buffer(context, world);
     }
 }
