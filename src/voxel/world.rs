@@ -36,16 +36,16 @@ impl Chunk {
             }
 
             // Interpolate to get block voxels
+            let mut vals = [0.0f32; 512];
+            math::tri_lerp_block(&noise_vals, &[8, 8, 8], &mut vals);
+
+            let mut idx = 0;
             for z in 0..8 {
                 for y in 0..8 {
                     for x in 0..8 {
-                        let dx = x as f32 / 7.0;
-                        let dy = y as f32 / 7.0;
-                        let dz = z as f32 / 7.0;
+                        let val = vals[idx];
+                        idx += 1;
 
-                        let val = math::tri_lerp(&noise_vals, &[dx, dy, dz]);
-
-                        // TODO: Some fancier way to determine voxel type and colour
                         if val > 0.0 {
                             let r = ((x + 1) * 32 - 1) as u8;
                             let g = ((y + 1) * 32 - 1) as u8;
