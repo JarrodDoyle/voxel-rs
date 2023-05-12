@@ -25,19 +25,24 @@ impl Chunk {
         if block.len() == 0 {
             // Extract relevant noise values from the chunk
             let mut noise_vals = Vec::new();
+
+            let mut block_sign = 0.0;
             for z in 0..2 {
                 for y in 0..2 {
                     for x in 0..2 {
                         let noise_pos = glam::uvec3(x, y, z) + pos;
                         let noise_idx = math::to_1d_index(noise_pos, noise_dims);
-                        noise_vals.push(self.noise[noise_idx]);
+                        let val = self.noise[noise_idx];
+                        noise_vals.push(val);
+                        block_sign += val.signum();
                     }
                 }
             }
 
-            // Interpolate to get block voxels
             let mut vals = [0.0f32; 512];
-            math::tri_lerp_block(&noise_vals, &[8, 8, 8], &mut vals);
+            if block_sign != -8.0 {
+                math::tri_lerp_block(&noise_vals, &[8, 8, 8], &mut vals);
+            }
 
             let mut idx = 0;
             for z in 0..8 {
