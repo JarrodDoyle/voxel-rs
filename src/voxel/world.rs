@@ -39,25 +39,29 @@ impl Chunk {
                 }
             }
 
-            let mut vals = [0.0f32; 512];
-            if block_sign != -8.0 {
+            // If all the corners are negative, then all the interpolated values
+            // will be negative too. In that case we can just fill with empty.
+            if block_sign == -8.0 {
+                block.resize(512, Voxel::Empty);
+            } else {
+                let mut vals = [0.0f32; 512];
                 math::tri_lerp_block(&noise_vals, &[8, 8, 8], &mut vals);
-            }
 
-            let mut idx = 0;
-            for z in 0..8 {
-                for y in 0..8 {
-                    for x in 0..8 {
-                        let val = vals[idx];
-                        idx += 1;
+                let mut idx = 0;
+                for z in 0..8 {
+                    for y in 0..8 {
+                        for x in 0..8 {
+                            let val = vals[idx];
+                            idx += 1;
 
-                        if val > 0.0 {
-                            let r = ((x + 1) * 32 - 1) as u8;
-                            let g = ((y + 1) * 32 - 1) as u8;
-                            let b = ((z + 1) * 32 - 1) as u8;
-                            block.push(Voxel::Color(r, g, b));
-                        } else {
-                            block.push(Voxel::Empty);
+                            if val > 0.0 {
+                                let r = ((x + 1) * 32 - 1) as u8;
+                                let g = ((y + 1) * 32 - 1) as u8;
+                                let b = ((z + 1) * 32 - 1) as u8;
+                                block.push(Voxel::Color(r, g, b));
+                            } else {
+                                block.push(Voxel::Empty);
+                            }
                         }
                     }
                 }
