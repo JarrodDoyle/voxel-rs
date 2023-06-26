@@ -22,7 +22,7 @@ impl Chunk {
         assert_eq!(self.blocks.len(), 32768);
         let block = &mut self.blocks[block_idx];
 
-        if block.len() == 0 {
+        if block.is_empty() {
             // Extract relevant noise values from the chunk
             let mut noise_vals = Vec::new();
 

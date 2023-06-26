@@ -89,7 +89,7 @@ impl App {
                 } if window_id == self.window.id() => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => {
-                        camera_controller.process_events(&event);
+                        camera_controller.process_events(event);
                     }
                 },
                 Event::MainEventsCleared => {

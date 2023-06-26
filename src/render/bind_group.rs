@@ -89,7 +89,7 @@ impl<'a> BindGroupBuilder<'a> {
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: self.label,
-                layout: &self.layout.unwrap(),
+                layout: self.layout.unwrap(),
                 entries: self.entries.as_slice(),
             })
     }

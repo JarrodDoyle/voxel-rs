@@ -1,7 +1,7 @@
 /// Linear interpolation.
 #[inline]
 pub fn lerp(a: f32, b: f32, w: f32) -> f32 {
-    assert!(0.0 <= w && w <= 1.0);
+    assert!((0.0..=1.0).contains(&w));
     a + (b - a) * w
 }
 

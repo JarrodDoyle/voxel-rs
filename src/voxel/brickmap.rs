@@ -38,14 +38,13 @@ pub struct BrickmapManager {
 // - Brickworld system
 impl BrickmapManager {
     pub fn new(context: &render::Context) -> Self {
-        let mut state_uniform = WorldState::default();
-        state_uniform.brickmap_cache_dims = [32, 32, 32];
+        let state_uniform = WorldState {
+            brickmap_cache_dims: [32, 32, 32],
+            ..Default::default()
+        };
 
-        let mut brickmap_cache = Vec::<Brickmap>::with_capacity(usize::pow(32, 3));
-        brickmap_cache.resize(brickmap_cache.capacity(), Brickmap::default());
-
-        let mut brickgrid = Vec::<u32>::with_capacity(usize::pow(32, 3));
-        brickgrid.resize(brickgrid.capacity(), 1);
+        let brickmap_cache = vec![Brickmap::default(); usize::pow(32, 3)];
+        let brickgrid = vec![1u32; usize::pow(32, 3)];
 
         let device = &context.device;
         let state_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -67,9 +66,7 @@ impl BrickmapManager {
         });
 
         let shading_table_allocator = ShadingTableAllocator::new(4, u32::pow(2, 24));
-        let shading_table_element_count = shading_table_allocator.total_elements as usize;
-        let mut shading_table = Vec::<u32>::with_capacity(shading_table_element_count);
-        shading_table.resize(shading_table.capacity(), 0);
+        let shading_table = vec![0u32; shading_table_allocator.total_elements as usize];
         let shading_table_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&shading_table),
@@ -168,7 +165,7 @@ impl BrickmapManager {
             assert_eq!(block.len(), 512);
 
             // Cull interior voxels
-            let mut bitmask_data = [0xFFFFFFFF as u32; 16];
+            let mut bitmask_data = [0xFFFFFFFF_u32; 16];
             let mut albedo_data = Vec::<u32>::new();
             for z in 0..8 {
                 // Each z level contains two bitmask segments of voxels
@@ -185,17 +182,18 @@ impl BrickmapManager {
                                 // A voxel is on the surface if at least one of it's
                                 // cardinal neighbours is non-solid. Also for simplicity
                                 // if it's on the edge of the chunk
-                                let surface_voxel: bool;
-                                if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
-                                    surface_voxel = true;
-                                } else {
-                                    surface_voxel = !(block[idx + 1] == empty_voxel
-                                        && block[idx - 1] == empty_voxel
-                                        && block[idx + 8] == empty_voxel
-                                        && block[idx - 8] == empty_voxel
-                                        && block[idx + 64] == empty_voxel
-                                        && block[idx - 64] == empty_voxel);
-                                }
+                                // TODO: Account for neighbours in other blocks
+                                let surface_voxel =
+                                    if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
+                                        true
+                                    } else {
+                                        !(block[idx + 1] == empty_voxel
+                                            && block[idx - 1] == empty_voxel
+                                            && block[idx + 8] == empty_voxel
+                                            && block[idx - 8] == empty_voxel
+                                            && block[idx + 64] == empty_voxel
+                                            && block[idx - 64] == empty_voxel)
+                                    };
 
                                 // Set the appropriate bit in the z entry and add the
                                 // shading data
@@ -211,7 +209,7 @@ impl BrickmapManager {
                         }
                     }
                 }
-                let offset = 2 * z as usize;
+                let offset = 2 * z;
                 bitmask_data[offset] = (entry & 0xFFFFFFFF).try_into().unwrap();
                 bitmask_data[offset + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
             }
@@ -298,7 +296,7 @@ impl ShadingBucket {
     fn contains_address(&self, address: u32) -> bool {
         let min = self.global_offset;
         let max = min + self.slot_count * self.slot_size;
-        return min <= address && address < max;
+        min <= address && address < max
     }
 
     fn try_alloc(&mut self) -> Option<u32> {
@@ -307,8 +305,7 @@ impl ShadingBucket {
         self.used.push(bucket_index);
 
         // Convert the bucket index into a global address
-        let address = self.global_offset + bucket_index * self.slot_size;
-        return Some(address);
+        Some(self.global_offset + bucket_index * self.slot_size)
     }
 
     fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {

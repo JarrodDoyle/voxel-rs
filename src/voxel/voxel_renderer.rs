@@ -28,7 +28,7 @@ impl VoxelRenderer {
                     | wgpu::TextureUsages::STORAGE_BINDING,
             )
             .with_shader_visibility(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
-            .build(&context);
+            .build(context);
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
