@@ -13,7 +13,7 @@ struct Brickmap {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct WorldState {
-    brickmap_cache_dims: [u32; 3],
+    brickgrid_dims: [u32; 3],
     _pad: u32,
 }
 
@@ -39,7 +39,7 @@ pub struct BrickmapManager {
 impl BrickmapManager {
     pub fn new(context: &render::Context, brickgrid_dims: glam::UVec3) -> Self {
         let state_uniform = WorldState {
-            brickmap_cache_dims: [brickgrid_dims.x, brickgrid_dims.y, brickgrid_dims.z],
+            brickgrid_dims: [brickgrid_dims.x, brickgrid_dims.y, brickgrid_dims.z],
             ..Default::default()
         };
 
@@ -154,7 +154,7 @@ impl BrickmapManager {
         self.feedback_result_buffer.unmap();
 
         // Generate a sphere of voxels
-        let world_dims = self.state_uniform.brickmap_cache_dims;
+        let world_dims = self.state_uniform.brickgrid_dims;
         for i in 0..request_count {
             let chunk_x = data[i * 4];
             let chunk_y = data[i * 4 + 1];

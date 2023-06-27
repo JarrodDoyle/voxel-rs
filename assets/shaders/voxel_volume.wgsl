@@ -23,8 +23,9 @@ struct Camera {
     _pad: f32,
 };
 
+// TODO: Should probably know how big the cache and shading table are etc.
 struct WorldState {
-    brickmap_cache_dims: vec3<u32>,
+    brickgrid_dims: vec3<u32>,
     _pad: u32,
 };
 
@@ -177,7 +178,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
     var hit_info = HitInfo(false, vec3<i32>(0), 0u, vec3<bool>(false));
 
     let min = vec3<f32>(0.0);
-    let max = min + vec3<f32>(world_state.brickmap_cache_dims);
+    let max = min + vec3<f32>(world_state.brickgrid_dims);
     let aabbHit = ray_intersect_aabb(orig_ray_pos, ray_dir, min, max);
     var ray_pos = orig_ray_pos;
     var tmin = aabbHit.distance;
@@ -194,16 +195,16 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
         var map_pos = vec3<i32>(floor(ray_pos));
         var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
 
-        let dims = world_state.brickmap_cache_dims;
+        let dims = world_state.brickgrid_dims;
         let max_grid_depth = i32(dims.x + dims.y + dims.z);
         for (var i: i32 = 0; i < max_grid_depth; i++) {
-            if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(world_state.brickmap_cache_dims))) {
+            if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(world_state.brickgrid_dims))) {
                 // If the ray has left the brickmap AABB there's no point in continuing
                 // to trace against it
                 break;
             }
 
-            let grid_idx = to_1d_index(map_pos, vec3<i32>(world_state.brickmap_cache_dims));
+            let grid_idx = to_1d_index(map_pos, vec3<i32>(world_state.brickgrid_dims));
             let brick_ptr = brickgrid[grid_idx];
             
             // Ptr = 28 bits LOD colour / brickmap index + 4 bits load flags
