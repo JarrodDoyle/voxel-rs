@@ -121,11 +121,11 @@ impl WorldManager {
         // block of each axis step outside of our 0..N bounds, sharing a value with the
         // neighbouring chunk
         let noise = simdnoise::NoiseBuilder::fbm_3d_offset(
-            pos.x as f32,
+            pos.x as f32 * self.chunk_dims.x as f32,
             self.chunk_dims.x as usize + 1,
-            pos.y as f32,
+            pos.y as f32 * self.chunk_dims.y as f32,
             self.chunk_dims.y as usize + 1,
-            pos.z as f32,
+            pos.z as f32 * self.chunk_dims.z as f32,
             self.chunk_dims.z as usize + 1,
         )
         .with_seed(self.settings.seed)
