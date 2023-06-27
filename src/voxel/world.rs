@@ -15,11 +15,13 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    fn get_block(&mut self, pos: glam::UVec3) -> Vec<Voxel> {
-        let chunk_dims = glam::uvec3(32, 32, 32);
+    fn get_block(&mut self, pos: glam::UVec3, chunk_dims: glam::UVec3) -> Vec<Voxel> {
         let noise_dims = chunk_dims + glam::uvec3(1, 1, 1);
         let block_idx = math::to_1d_index(pos, chunk_dims);
-        assert_eq!(self.blocks.len(), 32768);
+        assert_eq!(
+            self.blocks.len(),
+            (chunk_dims.x * chunk_dims.y * chunk_dims.z) as usize
+        );
         let block = &mut self.blocks[block_idx];
 
         if block.is_empty() {
@@ -47,6 +49,7 @@ impl Chunk {
                 let mut vals = [0.0f32; 512];
                 math::tri_lerp_block(&noise_vals, &[8, 8, 8], &mut vals);
 
+                // TODO: Better voxel colours
                 let mut idx = 0;
                 for z in 0..8 {
                     for y in 0..8 {
@@ -83,13 +86,22 @@ pub struct GenerationSettings {
 
 pub struct WorldManager {
     settings: GenerationSettings,
+    chunk_dims: glam::UVec3,
     chunks: HashMap<glam::IVec3, Chunk>,
 }
 
 impl WorldManager {
-    pub fn new(settings: GenerationSettings) -> Self {
+    pub fn new(settings: GenerationSettings, chunk_dims: glam::UVec3) -> Self {
         let chunks = HashMap::new();
-        Self { settings, chunks }
+        Self {
+            settings,
+            chunk_dims,
+            chunks,
+        }
+    }
+
+    pub fn get_chunk_dims(&self) -> glam::UVec3 {
+        self.chunk_dims
     }
 
     pub fn get_block(&mut self, chunk_pos: glam::IVec3, local_pos: glam::UVec3) -> Vec<Voxel> {
@@ -101,20 +113,20 @@ impl WorldManager {
         }
 
         let chunk = self.chunks.get_mut(&chunk_pos).unwrap();
-        chunk.get_block(local_pos)
+        chunk.get_block(local_pos, self.chunk_dims)
     }
 
     fn gen_chunk(&mut self, pos: glam::IVec3) -> Chunk {
-        // We use dimensions of 33 because the corners on the last chunk block of each
-        // axis step outside of our 0..32 bounds, sharing a value with the neighbouring
-        // chunk
+        // We use dimensions of `chunk_dims + 1` because the corners on the last chunk
+        // block of each axis step outside of our 0..N bounds, sharing a value with the
+        // neighbouring chunk
         let noise = simdnoise::NoiseBuilder::fbm_3d_offset(
             pos.x as f32,
-            33,
+            self.chunk_dims.x as usize + 1,
             pos.y as f32,
-            33,
+            self.chunk_dims.y as usize + 1,
             pos.z as f32,
-            33,
+            self.chunk_dims.z as usize + 1,
         )
         .with_seed(self.settings.seed)
         .with_freq(self.settings.frequency)
@@ -124,8 +136,8 @@ impl WorldManager {
         .generate()
         .0;
 
-        let mut blocks = Vec::with_capacity(32768);
-        blocks.resize(blocks.capacity(), vec![]);
+        let num_blocks = self.chunk_dims.x * self.chunk_dims.y * self.chunk_dims.z;
+        let blocks = vec![vec![]; num_blocks as usize];
         Chunk { pos, noise, blocks }
     }
 }

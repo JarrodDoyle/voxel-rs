@@ -68,13 +68,16 @@ impl App {
             0.25,
         );
 
-        let mut world = voxel::world::WorldManager::new(voxel::world::GenerationSettings {
-            seed: 0,
-            frequency: 0.04,
-            octaves: 3,
-            gain: 0.5,
-            lacunarity: 2.0,
-        });
+        let mut world = voxel::world::WorldManager::new(
+            voxel::world::GenerationSettings {
+                seed: 0,
+                frequency: 0.04,
+                octaves: 3,
+                gain: 0.5,
+                lacunarity: 2.0,
+            },
+            glam::uvec3(16, 32, 32),
+        );
 
         let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
 
