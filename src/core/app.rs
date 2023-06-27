@@ -76,7 +76,7 @@ impl App {
                 gain: 0.5,
                 lacunarity: 2.0,
             },
-            glam::uvec3(16, 32, 32),
+            glam::uvec3(32, 32, 32),
         );
 
         let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
