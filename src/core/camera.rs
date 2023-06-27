@@ -4,7 +4,6 @@ use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 use crate::render::Context;
 
-// TODO: Implement Default rather than using new()
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
@@ -12,6 +11,12 @@ pub struct CameraUniform {
     view: [[f32; 4]; 4],
     pos: [f32; 3],
     _pad: f32,
+}
+
+impl Default for CameraUniform {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CameraUniform {
