@@ -37,14 +37,15 @@ pub struct BrickmapManager {
 // - Cyclic brickmap cache with unloading
 // - Brickworld system
 impl BrickmapManager {
-    pub fn new(context: &render::Context) -> Self {
+    pub fn new(context: &render::Context, brickgrid_dims: glam::UVec3) -> Self {
         let state_uniform = WorldState {
-            brickmap_cache_dims: [32, 32, 32],
+            brickmap_cache_dims: [brickgrid_dims.x, brickgrid_dims.y, brickgrid_dims.z],
             ..Default::default()
         };
 
         let brickmap_cache = vec![Brickmap::default(); usize::pow(32, 3)];
-        let brickgrid = vec![1u32; usize::pow(32, 3)];
+        let brickgrid =
+            vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
 
         let device = &context.device;
         let state_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

@@ -60,7 +60,8 @@ impl VoxelRenderer {
                 });
 
         log::info!("Creating brickmap manager...");
-        let brickmap_manager = super::brickmap::BrickmapManager::new(context);
+        let brickgrid_dims = glam::uvec3(64, 64, 64);
+        let brickmap_manager = super::brickmap::BrickmapManager::new(context, brickgrid_dims);
 
         log::info!("Creating compute pipeline...");
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
