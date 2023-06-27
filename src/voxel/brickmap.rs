@@ -159,8 +159,14 @@ impl BrickmapManager {
             let chunk_y = data[i * 4 + 1];
             let chunk_z = data[i * 4 + 2];
 
-            let chunk_pos = glam::ivec3(0, 0, 0);
-            let block_pos = glam::uvec3(chunk_x, chunk_y, chunk_z);
+            let chunk_dims = world.get_chunk_dims();
+            let global_block_pos = glam::uvec3(chunk_x, chunk_y, chunk_z);
+            let chunk_pos = glam::ivec3(
+                (global_block_pos.x / chunk_dims.x) as i32,
+                (global_block_pos.y / chunk_dims.y) as i32,
+                (global_block_pos.z / chunk_dims.z) as i32,
+            );
+            let block_pos = global_block_pos % chunk_dims;
             let block = world.get_block(chunk_pos, block_pos);
             assert_eq!(block.len(), 512);
 
