@@ -78,10 +78,10 @@ impl VoxelRenderer {
                 None,
             )
             .with_uniform_entry(wgpu::ShaderStages::COMPUTE, None)
-            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE, None)
-            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE, None)
-            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE, None)
-            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE, None)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
             .with_uniform_entry(wgpu::ShaderStages::COMPUTE, None)
             .build(context);
         let raycast_bind_group = render::BindGroupBuilder::new()

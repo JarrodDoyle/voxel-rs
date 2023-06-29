@@ -55,11 +55,7 @@ impl<'a> BindGroupLayoutBuilder<'a> {
     }
 
     #[inline]
-    pub fn with_rw_storage_entry(
-        self,
-        visibility: wgpu::ShaderStages,
-        count: Option<NonZeroU32>,
-    ) -> Self {
+    pub fn with_rw_storage_entry(self, visibility: wgpu::ShaderStages) -> Self {
         self.with_entry(
             visibility,
             wgpu::BindingType::Buffer {
@@ -67,16 +63,12 @@ impl<'a> BindGroupLayoutBuilder<'a> {
                 has_dynamic_offset: false,
                 min_binding_size: None,
             },
-            count,
+            None,
         )
     }
 
     #[inline]
-    pub fn with_ro_storage_entry(
-        self,
-        visibility: wgpu::ShaderStages,
-        count: Option<NonZeroU32>,
-    ) -> Self {
+    pub fn with_ro_storage_entry(self, visibility: wgpu::ShaderStages) -> Self {
         self.with_entry(
             visibility,
             wgpu::BindingType::Buffer {
@@ -84,7 +76,7 @@ impl<'a> BindGroupLayoutBuilder<'a> {
                 has_dynamic_offset: false,
                 min_binding_size: None,
             },
-            count,
+            None,
         )
     }
 
