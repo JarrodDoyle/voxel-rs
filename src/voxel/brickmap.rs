@@ -315,19 +315,21 @@ impl ShadingBucket {
         Some(self.global_offset + bucket_index * self.slot_size)
     }
 
-    fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {
+    fn try_dealloc(&mut self, address: u32) -> Result<(), String> {
+        log::trace!("Dealloc address: {}", address);
         if !self.contains_address(address) {
-            return Err("Address is not within bucket range.");
+            let msg = format!("Address ({}) is not within bucket range.", address);
+            return Err(msg);
         }
 
         let local_address = address - self.global_offset;
         if local_address % self.slot_size != 0 {
-            return Err("Address is not aligned to bucket element size.");
+            return Err("Address is not aligned to bucket element size.".to_string());
         }
 
         let bucket_index = local_address / self.slot_size;
         if !self.used.contains(&bucket_index) {
-            return Err("Address is not currently allocated.");
+            return Err("Address is not currently allocated.".to_string());
         }
 
         // All the potential errors are out of the way, time to actually deallocate
@@ -387,10 +389,11 @@ impl ShadingTableAllocator {
             if idx.is_some() {
                 self.used_elements += bucket.slot_size;
                 log::info!(
-                    "Allocated to shader table at {}. {}/{}",
+                    "Allocated to shader table at {}. {}/{} ({}%)",
                     idx.unwrap(),
                     self.used_elements,
-                    self.total_elements
+                    self.total_elements,
+                    ((self.used_elements as f32 / self.total_elements as f32) * 100.0).floor()
                 );
                 return idx;
             }
@@ -399,8 +402,10 @@ impl ShadingTableAllocator {
         None
     }
 
-    fn try_dealloc(&mut self, address: u32) -> Result<(), &str> {
-        let bucket_idx = address / self.elements_per_bucket;
+    fn try_dealloc(&mut self, address: u32) -> Result<(), String> {
+        // Buckets are reverse order of their global offset so we need to reverse our idx
+        let mut bucket_idx = address / self.elements_per_bucket;
+        bucket_idx = self.bucket_count - bucket_idx - 1;
         let bucket = &mut self.buckets[bucket_idx as usize];
         self.used_elements -= bucket.slot_size;
         bucket.try_dealloc(address)
