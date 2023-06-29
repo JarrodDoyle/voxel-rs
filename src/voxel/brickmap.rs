@@ -17,13 +17,19 @@ struct WorldState {
     _pad: u32,
 }
 
+#[derive(Debug, Default, Copy, Clone)]
+struct BrickmapCacheEntry {
+    grid_idx: usize,
+    shading_table_offset: u32,
+}
+
 #[derive(Debug)]
 pub struct BrickmapManager {
     state_uniform: WorldState,
     state_buffer: wgpu::Buffer,
     brickgrid: Vec<u32>,
     brickgrid_buffer: wgpu::Buffer,
-    brickmap_cache: Vec<Brickmap>,
+    brickmap_cache_map: Vec<Option<BrickmapCacheEntry>>,
     brickmap_cache_idx: usize,
     brickmap_buffer: wgpu::Buffer,
     shading_table_buffer: wgpu::Buffer,
@@ -34,32 +40,31 @@ pub struct BrickmapManager {
 
 // TODO:
 // - GPU side unpack buffer rather than uploading each changed brickmap part
-// - Cyclic brickmap cache with unloading
 // - Brickworld system
 impl BrickmapManager {
     pub fn new(context: &render::Context, brickgrid_dims: glam::UVec3) -> Self {
+        let device = &context.device;
+
         let state_uniform = WorldState {
             brickgrid_dims: [brickgrid_dims.x, brickgrid_dims.y, brickgrid_dims.z],
             ..Default::default()
         };
-
-        let brickmap_cache = vec![Brickmap::default(); usize::pow(32, 3)];
-        let brickgrid =
-            vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
-
-        let device = &context.device;
         let state_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&[state_uniform]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
+        let brickgrid =
+            vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
         let brickgrid_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&brickgrid),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
+        let brickmap_cache = vec![Brickmap::default(); usize::pow(32, 3)];
+        let brickmap_cache_map = vec![None; brickmap_cache.capacity()];
         let brickmap_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&brickmap_cache),
@@ -95,7 +100,7 @@ impl BrickmapManager {
             state_buffer,
             brickgrid,
             brickgrid_buffer,
-            brickmap_cache,
+            brickmap_cache_map,
             brickmap_cache_idx: 0,
             brickmap_buffer,
             shading_table_buffer,
@@ -247,14 +252,31 @@ impl BrickmapManager {
             );
 
             // Update the brickmap
-            self.brickmap_cache[self.brickmap_cache_idx].bitmask = bitmask_data;
-            self.brickmap_cache[self.brickmap_cache_idx].shading_table_offset = shading_idx as u32;
+            let brickmap = Brickmap {
+                bitmask: bitmask_data,
+                shading_table_offset: shading_idx as u32,
+                lod_color: 0,
+            };
+
+            // If there's already something in the cache spot we want to write to, we
+            // need to unload it.
+            if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
+                let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
+                self.update_brickgrid_element(context, entry.grid_idx, 1);
+            }
+
+            // We're all good to overwrite the cache map entry now :)
+            self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
+                grid_idx: chunk_idx,
+                shading_table_offset: shading_idx as u32,
+            });
+
             context.queue.write_buffer(
                 &self.brickmap_buffer,
                 (72 * self.brickmap_cache_idx) as u64,
-                bytemuck::cast_slice(&[self.brickmap_cache[self.brickmap_cache_idx]]),
+                bytemuck::cast_slice(&[brickmap]),
             );
-            self.brickmap_cache_idx += 1;
+            self.brickmap_cache_idx = (self.brickmap_cache_idx + 1) % self.brickmap_cache_map.len();
         }
 
         // Reset the request count on the gpu buffer
@@ -265,11 +287,33 @@ impl BrickmapManager {
     }
 
     fn update_brickgrid_element(&mut self, context: &render::Context, index: usize, data: u32) {
-        self.brickgrid.splice(index..index + 1, [data]);
+        // If we're updating a brickgrid element, we need to make sure to deallocate anything
+        // that's already there. The shading table gets deallocated, and the brickmap cache entry
+        // is marked as None.
+        if (self.brickgrid[index] & 0xF) == 4 {
+            let brickmap_idx = (self.brickgrid[index] >> 8) as usize;
+            let cache_map_entry = self.brickmap_cache_map[brickmap_idx];
+            match cache_map_entry {
+                Some(entry) => {
+                    match self
+                        .shading_table_allocator
+                        .try_dealloc(entry.shading_table_offset)
+                    {
+                        Ok(_) => (),
+                        Err(e) => log::warn!("{}", e),
+                    }
+                    self.brickmap_cache_map[brickmap_idx] = None;
+                }
+                None => log::warn!("Expected brickmap cache entry, found None!"),
+            }
+        }
+
+        // We're safe to overwrite the CPU brickgrid and upload to gpu now
+        self.brickgrid[index] = data;
         context.queue.write_buffer(
             &self.brickgrid_buffer,
             (index * 4).try_into().unwrap(),
-            bytemuck::cast_slice(&[self.brickgrid[index]]),
+            bytemuck::cast_slice(&[data]),
         );
     }
 }
