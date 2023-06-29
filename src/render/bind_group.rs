@@ -38,6 +38,57 @@ impl<'a> BindGroupLayoutBuilder<'a> {
     }
 
     #[inline]
+    pub fn with_uniform_entry(
+        self,
+        visibility: wgpu::ShaderStages,
+        count: Option<NonZeroU32>,
+    ) -> Self {
+        self.with_entry(
+            visibility,
+            wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count,
+        )
+    }
+
+    #[inline]
+    pub fn with_rw_storage_entry(
+        self,
+        visibility: wgpu::ShaderStages,
+        count: Option<NonZeroU32>,
+    ) -> Self {
+        self.with_entry(
+            visibility,
+            wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count,
+        )
+    }
+
+    #[inline]
+    pub fn with_ro_storage_entry(
+        self,
+        visibility: wgpu::ShaderStages,
+        count: Option<NonZeroU32>,
+    ) -> Self {
+        self.with_entry(
+            visibility,
+            wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count,
+        )
+    }
+
+    #[inline]
     pub fn build(self, context: &Context) -> wgpu::BindGroupLayout {
         context
             .device

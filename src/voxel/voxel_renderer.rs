@@ -67,23 +67,6 @@ impl VoxelRenderer {
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
 
-        // Re-usable common definitions
-        let ty_uniform = wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        };
-        let ty_rw_storage = wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Storage { read_only: false },
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        };
-        let ty_ro_storage = wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Storage { read_only: true },
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        };
-
         let raycast_layout = render::BindGroupLayoutBuilder::new()
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
@@ -94,12 +77,12 @@ impl VoxelRenderer {
                 },
                 None,
             )
-            .with_entry(wgpu::ShaderStages::COMPUTE, ty_uniform, None)
-            .with_entry(wgpu::ShaderStages::COMPUTE, ty_rw_storage, None)
-            .with_entry(wgpu::ShaderStages::COMPUTE, ty_ro_storage, None)
-            .with_entry(wgpu::ShaderStages::COMPUTE, ty_ro_storage, None)
-            .with_entry(wgpu::ShaderStages::COMPUTE, ty_rw_storage, None)
-            .with_entry(wgpu::ShaderStages::COMPUTE, ty_uniform, None)
+            .with_uniform_entry(wgpu::ShaderStages::COMPUTE, None)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE, None)
+            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE, None)
+            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE, None)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE, None)
+            .with_uniform_entry(wgpu::ShaderStages::COMPUTE, None)
             .build(context);
         let raycast_bind_group = render::BindGroupBuilder::new()
             .with_layout(&raycast_layout)
