@@ -8,8 +8,8 @@ pub struct VoxelRenderer {
     render_texture: render::Texture,
     render_pipeline: wgpu::RenderPipeline,
     brickmap_manager: super::brickmap::BrickmapManager,
-    compute_pipeline: wgpu::ComputePipeline,
-    compute_bind_group: wgpu::BindGroup,
+    raycast_pipeline: wgpu::ComputePipeline,
+    raycast_bind_group: wgpu::BindGroup,
 }
 
 impl VoxelRenderer {
@@ -66,7 +66,25 @@ impl VoxelRenderer {
         log::info!("Creating compute pipeline...");
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
-        let compute_layout = render::BindGroupLayoutBuilder::new()
+
+        // Re-usable common definitions
+        let ty_uniform = wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        };
+        let ty_rw_storage = wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: false },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        };
+        let ty_ro_storage = wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        };
+
+        let raycast_layout = render::BindGroupLayoutBuilder::new()
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
                 wgpu::BindingType::StorageTexture {
@@ -76,63 +94,15 @@ impl VoxelRenderer {
                 },
                 None,
             )
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
-            .with_entry(
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                None,
-            )
+            .with_entry(wgpu::ShaderStages::COMPUTE, ty_uniform, None)
+            .with_entry(wgpu::ShaderStages::COMPUTE, ty_rw_storage, None)
+            .with_entry(wgpu::ShaderStages::COMPUTE, ty_ro_storage, None)
+            .with_entry(wgpu::ShaderStages::COMPUTE, ty_ro_storage, None)
+            .with_entry(wgpu::ShaderStages::COMPUTE, ty_rw_storage, None)
+            .with_entry(wgpu::ShaderStages::COMPUTE, ty_uniform, None)
             .build(context);
-        let compute_bind_group = render::BindGroupBuilder::new()
-            .with_layout(&compute_layout)
+        let raycast_bind_group = render::BindGroupBuilder::new()
+            .with_layout(&raycast_layout)
             .with_entry(wgpu::BindingResource::TextureView(&render_texture.view))
             .with_entry(brickmap_manager.get_worldstate_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_brickgrid_buffer().as_entire_binding())
@@ -141,7 +111,7 @@ impl VoxelRenderer {
             .with_entry(brickmap_manager.get_feedback_buffer().as_entire_binding())
             .with_entry(camera_controller.get_buffer().as_entire_binding())
             .build(context);
-        let compute_pipeline =
+        let raycast_pipeline =
             context
                 .device
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -149,7 +119,7 @@ impl VoxelRenderer {
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("compute"),
-                            bind_group_layouts: &[&compute_layout],
+                            bind_group_layouts: &[&raycast_layout],
                             push_constant_ranges: &[],
                         },
                     )),
@@ -162,8 +132,8 @@ impl VoxelRenderer {
             render_texture,
             render_pipeline,
             brickmap_manager,
-            compute_pipeline,
-            compute_bind_group,
+            raycast_pipeline,
+            raycast_bind_group,
         }
     }
 }
@@ -181,8 +151,8 @@ impl render::Renderer for VoxelRenderer {
 
         let size = self.render_texture.attributes.size;
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-        compute_pass.set_pipeline(&self.compute_pipeline);
-        compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+        compute_pass.set_pipeline(&self.raycast_pipeline);
+        compute_pass.set_bind_group(0, &self.raycast_bind_group, &[]);
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
         drop(compute_pass);
 
