@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::render;
+use crate::{math, render};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -23,6 +23,13 @@ struct BrickmapCacheEntry {
     shading_table_offset: u32,
 }
 
+enum BrickgridFlag {
+    Empty = 0,
+    Unloaded = 1,
+    Loading = 2,
+    Loaded = 4,
+}
+
 #[derive(Debug)]
 pub struct BrickmapManager {
     state_uniform: WorldState,
@@ -39,7 +46,7 @@ pub struct BrickmapManager {
 }
 
 // TODO:
-// - GPU side unpack buffer rather than uploading each changed brickmap part
+// - GPU side unpack buffer rather than uploading each changed brickmap part. HIGH PRIO!!
 // - Brickworld system
 impl BrickmapManager {
     pub fn new(context: &render::Context, brickgrid_dims: glam::UVec3) -> Self {
@@ -159,87 +166,61 @@ impl BrickmapManager {
         self.feedback_result_buffer.unmap();
 
         // Generate a sphere of voxels
-        let world_dims = self.state_uniform.brickgrid_dims;
+        let grid_dims = self.state_uniform.brickgrid_dims;
         for i in 0..request_count {
-            let chunk_x = data[i * 4];
-            let chunk_y = data[i * 4 + 1];
-            let chunk_z = data[i * 4 + 2];
-
-            let chunk_dims = world.get_chunk_dims();
-            let global_block_pos = glam::uvec3(chunk_x, chunk_y, chunk_z);
-            let chunk_pos = glam::ivec3(
-                (global_block_pos.x / chunk_dims.x) as i32,
-                (global_block_pos.y / chunk_dims.y) as i32,
-                (global_block_pos.z / chunk_dims.z) as i32,
+            // Extract brickgrid position of the requested brickmap
+            let grid_x = data[i * 4];
+            let grid_y = data[i * 4 + 1];
+            let grid_z = data[i * 4 + 2];
+            let grid_pos = glam::uvec3(grid_x, grid_y, grid_z);
+            let grid_idx = math::to_1d_index(
+                grid_pos,
+                glam::uvec3(grid_dims[0], grid_dims[1], grid_dims[2]),
             );
-            let block_pos = global_block_pos % chunk_dims;
+
+            // The CPU side World uses different terminology and coordinate system
+            // We need to convert between Brickmap and World pos and get the relevant
+            // World voxels
+            let chunk_dims = world.get_chunk_dims();
+            let chunk_pos = glam::ivec3(
+                (grid_pos.x / chunk_dims.x) as i32,
+                (grid_pos.y / chunk_dims.y) as i32,
+                (grid_pos.z / chunk_dims.z) as i32,
+            );
+            let block_pos = grid_pos % chunk_dims;
             let block = world.get_block(chunk_pos, block_pos);
             assert_eq!(block.len(), 512);
 
-            // Cull interior voxels
+            // The World gives us the full voxel data for the requested block of voxels.
+            // For Brickmap raytracing we only care about the visible surface voxels, so
+            // we need to cull any interior voxels.
             let mut bitmask_data = [0xFFFFFFFF_u32; 16];
             let mut albedo_data = Vec::<u32>::new();
-            for z in 0..8 {
-                // Each z level contains two bitmask segments of voxels
-                let mut entry = 0u64;
-                for y in 0..8 {
-                    for x in 0..8 {
-                        // Ignore non-solids
-                        let idx = x + y * 8 + z * 8 * 8;
-                        let empty_voxel = super::world::Voxel::Empty;
+            Self::cull_interior_voxels(&block, &mut bitmask_data, &mut albedo_data);
 
-                        match block[idx] {
-                            super::world::Voxel::Empty => continue,
-                            super::world::Voxel::Color(r, g, b) => {
-                                // A voxel is on the surface if at least one of it's
-                                // cardinal neighbours is non-solid. Also for simplicity
-                                // if it's on the edge of the chunk
-                                // TODO: Account for neighbours in other blocks
-                                let surface_voxel =
-                                    if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
-                                        true
-                                    } else {
-                                        !(block[idx + 1] == empty_voxel
-                                            && block[idx - 1] == empty_voxel
-                                            && block[idx + 8] == empty_voxel
-                                            && block[idx - 8] == empty_voxel
-                                            && block[idx + 64] == empty_voxel
-                                            && block[idx - 64] == empty_voxel)
-                                    };
-
-                                // Set the appropriate bit in the z entry and add the
-                                // shading data
-                                if surface_voxel {
-                                    entry += 1 << (x + y * 8);
-                                    let albedo = ((r as u32) << 24)
-                                        + ((g as u32) << 16)
-                                        + ((b as u32) << 8)
-                                        + 255u32;
-                                    albedo_data.push(albedo);
-                                }
-                            }
-                        }
-                    }
-                }
-                let offset = 2 * z;
-                bitmask_data[offset] = (entry & 0xFFFFFFFF).try_into().unwrap();
-                bitmask_data[offset + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
-            }
-
-            let chunk_idx = (chunk_x
-                + chunk_y * world_dims[0]
-                + chunk_z * world_dims[0] * world_dims[1]) as usize;
-
-            // Don't upload it if it's empty
+            // If there's no voxel colour data post-culling it means the brickmap is
+            // empty. We don't need to upload it, just mark the relevant brickgrid entry.
             if albedo_data.is_empty() {
-                self.update_brickgrid_element(context, chunk_idx, 0);
+                self.update_brickgrid_element(context, grid_idx, 0);
                 continue;
             }
 
+            // TODO: Add to a brickgrid unpack buffer
             // Update the brickgrid index
-            let brickgrid_element = ((self.brickmap_cache_idx as u32) << 8) + 4;
-            self.update_brickgrid_element(context, chunk_idx, brickgrid_element);
+            self.update_brickgrid_element(
+                context,
+                grid_idx,
+                Self::to_brickgrid_element(self.brickmap_cache_idx as u32, BrickgridFlag::Loaded),
+            );
 
+            // If there's already something in the cache spot we want to write to, we
+            // need to unload it.
+            if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
+                let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
+                self.update_brickgrid_element(context, entry.grid_idx, 1);
+            }
+
+            // TODO: Add to a brickmap unpack buffer
             // Update the shading table
             let shading_idx = self
                 .shading_table_allocator
@@ -251,26 +232,18 @@ impl BrickmapManager {
                 bytemuck::cast_slice(&albedo_data),
             );
 
+            // We're all good to overwrite the cache map entry now :)
+            self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
+                grid_idx,
+                shading_table_offset: shading_idx as u32,
+            });
+
             // Update the brickmap
             let brickmap = Brickmap {
                 bitmask: bitmask_data,
                 shading_table_offset: shading_idx as u32,
                 lod_color: 0,
             };
-
-            // If there's already something in the cache spot we want to write to, we
-            // need to unload it.
-            if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
-                let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
-                self.update_brickgrid_element(context, entry.grid_idx, 1);
-            }
-
-            // We're all good to overwrite the cache map entry now :)
-            self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
-                grid_idx: chunk_idx,
-                shading_table_offset: shading_idx as u32,
-            });
-
             context.queue.write_buffer(
                 &self.brickmap_buffer,
                 (72 * self.brickmap_cache_idx) as u64,
@@ -283,6 +256,7 @@ impl BrickmapManager {
         let data = &[0, 0, 0, 0];
         context.queue.write_buffer(&self.feedback_buffer, 4, data);
 
+        // TODO: This is inaccurate if we've looped
         log::info!("Num loaded brickmaps: {}", self.brickmap_cache_idx);
     }
 
@@ -315,6 +289,63 @@ impl BrickmapManager {
             (index * 4).try_into().unwrap(),
             bytemuck::cast_slice(&[data]),
         );
+    }
+
+    fn cull_interior_voxels(
+        block: &[super::world::Voxel],
+        bitmask_data: &mut [u32; 16],
+        albedo_data: &mut Vec<u32>,
+    ) {
+        for z in 0..8 {
+            // Each z level contains two bitmask segments of voxels
+            let mut entry = 0u64;
+            for y in 0..8 {
+                for x in 0..8 {
+                    // Ignore non-solids
+                    let idx = x + y * 8 + z * 8 * 8;
+                    let empty_voxel = super::world::Voxel::Empty;
+
+                    match block[idx] {
+                        super::world::Voxel::Empty => continue,
+                        super::world::Voxel::Color(r, g, b) => {
+                            // A voxel is on the surface if at least one of it's
+                            // cardinal neighbours is non-solid. Also for simplicity
+                            // if it's on the edge of the chunk
+                            // TODO: Account for neighbours in other blocks
+                            let surface_voxel =
+                                if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
+                                    true
+                                } else {
+                                    !(block[idx + 1] == empty_voxel
+                                        && block[idx - 1] == empty_voxel
+                                        && block[idx + 8] == empty_voxel
+                                        && block[idx - 8] == empty_voxel
+                                        && block[idx + 64] == empty_voxel
+                                        && block[idx - 64] == empty_voxel)
+                                };
+
+                            // Set the appropriate bit in the z entry and add the
+                            // shading data
+                            if surface_voxel {
+                                entry += 1 << (x + y * 8);
+                                let albedo = ((r as u32) << 24)
+                                    + ((g as u32) << 16)
+                                    + ((b as u32) << 8)
+                                    + 255u32;
+                                albedo_data.push(albedo);
+                            }
+                        }
+                    }
+                }
+            }
+            let offset = 2 * z;
+            bitmask_data[offset] = (entry & 0xFFFFFFFF).try_into().unwrap();
+            bitmask_data[offset + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
+        }
+    }
+
+    fn to_brickgrid_element(brickmap_cache_idx: u32, flags: BrickgridFlag) -> u32 {
+        (brickmap_cache_idx << 8) + flags as u32
     }
 }
 
@@ -432,7 +463,7 @@ impl ShadingTableAllocator {
             let idx = bucket.try_alloc();
             if idx.is_some() {
                 self.used_elements += bucket.slot_size;
-                log::info!(
+                log::trace!(
                     "Allocated to shader table at {}. {}/{} ({}%)",
                     idx.unwrap(),
                     self.used_elements,
