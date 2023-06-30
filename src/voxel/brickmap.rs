@@ -159,7 +159,8 @@ impl BrickmapManager {
         }
 
         // Get the position data
-        slice = self.feedback_result_buffer.slice(16..);
+        let range_end = 16 + 16 * request_count as u64;
+        slice = self.feedback_result_buffer.slice(16..range_end);
         slice.map_async(wgpu::MapMode::Read, |_| {});
         context.device.poll(wgpu::Maintain::Wait);
         data = bytemuck::cast_slice(slice.get_mapped_range().as_ref()).to_vec();
