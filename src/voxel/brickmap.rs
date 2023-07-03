@@ -187,9 +187,7 @@ impl BrickmapManager {
             // The World gives us the full voxel data for the requested block of voxels.
             // For Brickmap raytracing we only care about the visible surface voxels, so
             // we need to cull any interior voxels.
-            let mut bitmask_data = [0xFFFFFFFF_u32; 16];
-            let mut albedo_data = Vec::<u32>::new();
-            Self::cull_interior_voxels(&block, &mut bitmask_data, &mut albedo_data);
+            let (bitmask_data, albedo_data) = Self::cull_interior_voxels(&block);
 
             // If there's no voxel colour data post-culling it means the brickmap is
             // empty. We don't need to upload it, just mark the relevant brickgrid entry.
@@ -284,11 +282,9 @@ impl BrickmapManager {
         );
     }
 
-    fn cull_interior_voxels(
-        block: &[super::world::Voxel],
-        bitmask_data: &mut [u32; 16],
-        albedo_data: &mut Vec<u32>,
-    ) {
+    fn cull_interior_voxels(block: &[super::world::Voxel]) -> ([u32; 16], Vec<u32>) {
+        let mut bitmask_data = [0xFFFFFFFF_u32; 16];
+        let mut albedo_data = Vec::<u32>::new();
         for z in 0..8 {
             // Each z level contains two bitmask segments of voxels
             let mut entry = 0u64;
@@ -335,6 +331,7 @@ impl BrickmapManager {
             bitmask_data[offset] = (entry & 0xFFFFFFFF).try_into().unwrap();
             bitmask_data[offset + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
         }
+        (bitmask_data, albedo_data)
     }
 
     fn to_brickgrid_element(brickmap_cache_idx: u32, flags: BrickgridFlag) -> u32 {
