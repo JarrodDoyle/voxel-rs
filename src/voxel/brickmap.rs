@@ -170,10 +170,7 @@ impl BrickmapManager {
         let grid_dims = self.state_uniform.brickgrid_dims;
         for i in 0..request_count {
             // Extract brickgrid position of the requested brickmap
-            let grid_x = data[i * 4];
-            let grid_y = data[i * 4 + 1];
-            let grid_z = data[i * 4 + 2];
-            let grid_pos = glam::uvec3(grid_x, grid_y, grid_z);
+            let grid_pos = glam::uvec3(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
             let grid_idx = math::to_1d_index(
                 grid_pos,
                 glam::uvec3(grid_dims[0], grid_dims[1], grid_dims[2]),
