@@ -61,7 +61,6 @@ pub struct BrickmapManager {
 }
 
 // TODO:
-// - GPU side unpack buffer rather than uploading each changed brickmap part. HIGH PRIO!!
 // - Brickworld system
 impl BrickmapManager {
     pub fn new(context: &render::Context, brickgrid_dims: glam::UVec3) -> Self {
@@ -253,17 +252,11 @@ impl BrickmapManager {
                 self.update_brickgrid_element(entry.grid_idx, 1);
             }
 
-            // TODO: Add to a brickmap unpack buffer
             // Update the shading table
             let shading_idx = self
                 .shading_table_allocator
                 .try_alloc(albedo_data.len() as u32)
                 .unwrap() as usize;
-            // context.queue.write_buffer(
-            //     &self.shading_table_buffer,
-            //     (shading_idx * 4) as u64,
-            //     bytemuck::cast_slice(&albedo_data),
-            // );
 
             // We're all good to overwrite the cache map entry now :)
             self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
@@ -277,11 +270,6 @@ impl BrickmapManager {
                 shading_table_offset: shading_idx as u32,
                 lod_color: 0,
             };
-            // context.queue.write_buffer(
-            //     &self.brickmap_buffer,
-            //     (72 * self.brickmap_cache_idx) as u64,
-            //     bytemuck::cast_slice(&[brickmap]),
-            // );
 
             let shading_element_count = albedo_data.len();
             let mut shading_elements = [0u32; 512];

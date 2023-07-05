@@ -49,18 +49,6 @@ struct Feedback {
     positions: array<vec4<i32>>,
 }
 
-// struct UnpackElement {
-//     pos: vec3<i32>,
-//     cache_idx: u32,
-//     map: Brickmap,
-// }
-
-// struct Unpack {
-//     max_count: u32,
-//     count: u32,
-//     maps: array<UnpackElement>
-// }
-
 // Utility function. Converts a position in 3d to a 1d index.
 fn to_1d_index(p: vec3<i32>, dims: vec3<i32>) -> u32 {
     return u32(p.x + p.y * dims.x + p.z * dims.x * dims.y);
