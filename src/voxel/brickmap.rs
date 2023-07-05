@@ -72,7 +72,7 @@ impl BrickmapManager {
             ..Default::default()
         };
         let state_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Brick World State"),
             contents: bytemuck::cast_slice(&[state_uniform]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
@@ -80,7 +80,7 @@ impl BrickmapManager {
         let brickgrid =
             vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
         let brickgrid_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Brickgrid"),
             contents: bytemuck::cast_slice(&brickgrid),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
@@ -88,7 +88,7 @@ impl BrickmapManager {
         let brickmap_cache = vec![Brickmap::default(); usize::pow(32, 3)];
         let brickmap_cache_map = vec![None; brickmap_cache.capacity()];
         let brickmap_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Brickmap Cache"),
             contents: bytemuck::cast_slice(&brickmap_cache),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
@@ -96,7 +96,7 @@ impl BrickmapManager {
         let shading_table_allocator = ShadingTableAllocator::new(4, u32::pow(2, 24));
         let shading_table = vec![0u32; shading_table_allocator.total_elements as usize];
         let shading_table_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Shading Table"),
             contents: bytemuck::cast_slice(&shading_table),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
@@ -104,14 +104,14 @@ impl BrickmapManager {
         let mut arr = [0u32; 1028];
         arr[0] = 256;
         let feedback_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Feedback"),
             contents: bytemuck::cast_slice(&arr),
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
         });
         let feedback_result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+            label: Some("Feedback Read"),
             size: 1028 * 4,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
@@ -123,7 +123,7 @@ impl BrickmapManager {
         let brickgrid_staged = HashSet::new();
         let brickgrid_unpack_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
+                label: Some("Brickgrid Unpack"),
                 contents: bytemuck::cast_slice(&arr),
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             });
@@ -132,7 +132,7 @@ impl BrickmapManager {
         arr[0] = unpack_max_count as u32;
         let brickmap_staged = Vec::new();
         let brickmap_unpack_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
+            label: Some("Brickmap Unpack"),
             contents: bytemuck::cast_slice(&arr),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });

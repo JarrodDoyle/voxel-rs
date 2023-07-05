@@ -37,7 +37,7 @@ impl VoxelRenderer {
             context
                 .device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: None,
+                    label: Some("Raycast Quad"),
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("draw"),
@@ -69,6 +69,7 @@ impl VoxelRenderer {
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/brickmap_upload.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
         let unpack_layout = render::BindGroupLayoutBuilder::new()
+            .with_label("GPU Unpack BGL")
             .with_uniform_entry(wgpu::ShaderStages::COMPUTE)
             .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
             .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
@@ -77,6 +78,7 @@ impl VoxelRenderer {
             .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
             .build(context);
         let unpack_bind_group = render::BindGroupBuilder::new()
+            .with_label("GPU Unpack BG")
             .with_layout(&unpack_layout)
             .with_entry(brickmap_manager.get_worldstate_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_brickgrid_buffer().as_entire_binding())
@@ -97,10 +99,10 @@ impl VoxelRenderer {
             context
                 .device
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: None,
+                    label: Some("GPU Unpack Pipeline"),
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("compute"),
+                            label: Some("GPU Unpack PL"),
                             bind_group_layouts: &[&unpack_layout],
                             push_constant_ranges: &[],
                         },
@@ -112,6 +114,7 @@ impl VoxelRenderer {
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
         let raycast_layout = render::BindGroupLayoutBuilder::new()
+            .with_label("Voxel Raycast BGL")
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
                 wgpu::BindingType::StorageTexture {
@@ -129,6 +132,7 @@ impl VoxelRenderer {
             .with_uniform_entry(wgpu::ShaderStages::COMPUTE)
             .build(context);
         let raycast_bind_group = render::BindGroupBuilder::new()
+            .with_label("Voxel Raycast BG")
             .with_layout(&raycast_layout)
             .with_entry(wgpu::BindingResource::TextureView(&render_texture.view))
             .with_entry(brickmap_manager.get_worldstate_buffer().as_entire_binding())
@@ -142,10 +146,10 @@ impl VoxelRenderer {
             context
                 .device
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: None,
+                    label: Some("Voxel Raycast Pipeline"),
                     layout: Some(&context.device.create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("compute"),
+                            label: Some("Voxel Raycast PL"),
                             bind_group_layouts: &[&raycast_layout],
                             push_constant_ranges: &[],
                         },
