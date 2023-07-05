@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub struct App {
+    title: String,
     window: winit::window::Window,
     event_loop: EventLoop<()>,
     render_ctx: render::Context,
@@ -39,6 +40,7 @@ impl App {
         .await;
 
         Self {
+            title: title.to_owned(),
             window,
             event_loop,
             render_ctx,
@@ -109,6 +111,11 @@ impl App {
                     renderer.update_brickmap(&self.render_ctx, &mut world);
 
                     // Simple framerate tracking
+                    self.window.set_title(&format!(
+                        "{}: {} fps",
+                        self.title,
+                        (1.0 / dt.as_secs_f32()).floor()
+                    ));
                     cumulative_dt += dt.as_secs_f32();
                     frames_accumulated += 1.0;
                     if cumulative_dt >= 1.0 {
