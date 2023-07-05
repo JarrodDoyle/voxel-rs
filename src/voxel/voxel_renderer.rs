@@ -10,6 +10,8 @@ pub struct VoxelRenderer {
     brickmap_manager: super::brickmap::BrickmapManager,
     raycast_pipeline: wgpu::ComputePipeline,
     raycast_bind_group: wgpu::BindGroup,
+    unpack_pipeline: wgpu::ComputePipeline,
+    unpack_bind_group: wgpu::BindGroup,
 }
 
 impl VoxelRenderer {
@@ -63,10 +65,52 @@ impl VoxelRenderer {
         let brickgrid_dims = glam::uvec3(64, 64, 64);
         let brickmap_manager = super::brickmap::BrickmapManager::new(context, brickgrid_dims);
 
-        log::info!("Creating compute pipeline...");
+        log::info!("Creating compute pipelines...");
+        let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/brickmap_upload.wgsl");
+        let cs = context.device.create_shader_module(cs_descriptor);
+        let unpack_layout = render::BindGroupLayoutBuilder::new()
+            .with_uniform_entry(wgpu::ShaderStages::COMPUTE)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
+            .build(context);
+        let unpack_bind_group = render::BindGroupBuilder::new()
+            .with_layout(&unpack_layout)
+            .with_entry(brickmap_manager.get_worldstate_buffer().as_entire_binding())
+            .with_entry(brickmap_manager.get_brickgrid_buffer().as_entire_binding())
+            .with_entry(brickmap_manager.get_brickmap_buffer().as_entire_binding())
+            .with_entry(brickmap_manager.get_shading_buffer().as_entire_binding())
+            .with_entry(
+                brickmap_manager
+                    .get_brickmap_unpack_buffer()
+                    .as_entire_binding(),
+            )
+            .with_entry(
+                brickmap_manager
+                    .get_brickgrid_unpack_buffer()
+                    .as_entire_binding(),
+            )
+            .build(context);
+        let unpack_pipeline =
+            context
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: Some(&context.device.create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("compute"),
+                            bind_group_layouts: &[&unpack_layout],
+                            push_constant_ranges: &[],
+                        },
+                    )),
+                    module: &cs,
+                    entry_point: "compute",
+                });
+
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
-
         let raycast_layout = render::BindGroupLayoutBuilder::new()
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
@@ -117,6 +161,8 @@ impl VoxelRenderer {
             brickmap_manager,
             raycast_pipeline,
             raycast_bind_group,
+            unpack_pipeline,
+            unpack_bind_group,
         }
     }
 }
@@ -137,6 +183,12 @@ impl render::Renderer for VoxelRenderer {
         compute_pass.set_pipeline(&self.raycast_pipeline);
         compute_pass.set_bind_group(0, &self.raycast_bind_group, &[]);
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
+        drop(compute_pass);
+
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        compute_pass.set_pipeline(&self.unpack_pipeline);
+        compute_pass.set_bind_group(0, &self.unpack_bind_group, &[]);
+        compute_pass.dispatch_workgroups(256 / 8, 1, 1);
         drop(compute_pass);
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

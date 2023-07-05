@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use wgpu::util::DeviceExt;
 
 use crate::{math, render};
@@ -23,6 +25,15 @@ struct BrickmapCacheEntry {
     shading_table_offset: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct BrickmapUnpackElement {
+    cache_idx: u32,
+    brickmap: Brickmap,
+    shading_element_count: u32,
+    shading_elements: [u32; 512],
+}
+
 enum BrickgridFlag {
     Empty = 0,
     Unloaded = 1,
@@ -43,6 +54,10 @@ pub struct BrickmapManager {
     shading_table_allocator: ShadingTableAllocator,
     feedback_buffer: wgpu::Buffer,
     feedback_result_buffer: wgpu::Buffer,
+    brickgrid_staged: HashSet<usize>,
+    brickgrid_unpack_buffer: wgpu::Buffer,
+    brickmap_staged: Vec<BrickmapUnpackElement>,
+    brickmap_unpack_buffer: wgpu::Buffer,
 }
 
 // TODO:
@@ -102,6 +117,25 @@ impl BrickmapManager {
             mapped_at_creation: false,
         });
 
+        let mut arr = vec![0u32; 516];
+        arr[0] = 256;
+        let brickgrid_staged = HashSet::new();
+        let brickgrid_unpack_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&arr),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let mut arr = vec![0u32; 136196];
+        arr[0] = 256;
+        let brickmap_staged = Vec::new();
+        let brickmap_unpack_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&arr),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
         Self {
             state_uniform,
             state_buffer,
@@ -114,6 +148,10 @@ impl BrickmapManager {
             shading_table_allocator,
             feedback_buffer,
             feedback_result_buffer,
+            brickgrid_staged,
+            brickgrid_unpack_buffer,
+            brickmap_staged,
+            brickmap_unpack_buffer,
         }
     }
 
@@ -141,6 +179,14 @@ impl BrickmapManager {
         &self.feedback_result_buffer
     }
 
+    pub fn get_brickmap_unpack_buffer(&self) -> &wgpu::Buffer {
+        &self.brickmap_unpack_buffer
+    }
+
+    pub fn get_brickgrid_unpack_buffer(&self) -> &wgpu::Buffer {
+        &self.brickgrid_unpack_buffer
+    }
+
     pub fn process_feedback_buffer(
         &mut self,
         context: &render::Context,
@@ -155,6 +201,7 @@ impl BrickmapManager {
 
         let request_count = data[1] as usize;
         if request_count == 0 {
+            self.upload_unpack_buffers(context);
             return;
         }
 
@@ -189,14 +236,12 @@ impl BrickmapManager {
             // If there's no voxel colour data post-culling it means the brickmap is
             // empty. We don't need to upload it, just mark the relevant brickgrid entry.
             if albedo_data.is_empty() {
-                self.update_brickgrid_element(context, grid_idx, 0);
+                self.update_brickgrid_element(grid_idx, 0);
                 continue;
             }
 
-            // TODO: Add to a brickgrid unpack buffer
             // Update the brickgrid index
             self.update_brickgrid_element(
-                context,
                 grid_idx,
                 Self::to_brickgrid_element(self.brickmap_cache_idx as u32, BrickgridFlag::Loaded),
             );
@@ -205,7 +250,7 @@ impl BrickmapManager {
             // need to unload it.
             if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
                 let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
-                self.update_brickgrid_element(context, entry.grid_idx, 1);
+                self.update_brickgrid_element(entry.grid_idx, 1);
             }
 
             // TODO: Add to a brickmap unpack buffer
@@ -214,11 +259,11 @@ impl BrickmapManager {
                 .shading_table_allocator
                 .try_alloc(albedo_data.len() as u32)
                 .unwrap() as usize;
-            context.queue.write_buffer(
-                &self.shading_table_buffer,
-                (shading_idx * 4) as u64,
-                bytemuck::cast_slice(&albedo_data),
-            );
+            // context.queue.write_buffer(
+            //     &self.shading_table_buffer,
+            //     (shading_idx * 4) as u64,
+            //     bytemuck::cast_slice(&albedo_data),
+            // );
 
             // We're all good to overwrite the cache map entry now :)
             self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
@@ -232,11 +277,23 @@ impl BrickmapManager {
                 shading_table_offset: shading_idx as u32,
                 lod_color: 0,
             };
-            context.queue.write_buffer(
-                &self.brickmap_buffer,
-                (72 * self.brickmap_cache_idx) as u64,
-                bytemuck::cast_slice(&[brickmap]),
-            );
+            // context.queue.write_buffer(
+            //     &self.brickmap_buffer,
+            //     (72 * self.brickmap_cache_idx) as u64,
+            //     bytemuck::cast_slice(&[brickmap]),
+            // );
+
+            let shading_element_count = albedo_data.len();
+            let mut shading_elements = [0u32; 512];
+            shading_elements[..shading_element_count].copy_from_slice(&albedo_data);
+
+            let staged_brickmap = BrickmapUnpackElement {
+                cache_idx: self.brickmap_cache_idx as u32,
+                brickmap,
+                shading_element_count: shading_element_count as u32,
+                shading_elements,
+            };
+            self.brickmap_staged.push(staged_brickmap);
             self.brickmap_cache_idx = (self.brickmap_cache_idx + 1) % self.brickmap_cache_map.len();
         }
 
@@ -244,11 +301,13 @@ impl BrickmapManager {
         let data = &[0, 0, 0, 0];
         context.queue.write_buffer(&self.feedback_buffer, 4, data);
 
+        self.upload_unpack_buffers(context);
+
         // TODO: This is inaccurate if we've looped
         log::info!("Num loaded brickmaps: {}", self.brickmap_cache_idx);
     }
 
-    fn update_brickgrid_element(&mut self, context: &render::Context, index: usize, data: u32) {
+    fn update_brickgrid_element(&mut self, index: usize, data: u32) {
         // If we're updating a brickgrid element, we need to make sure to deallocate anything
         // that's already there. The shading table gets deallocated, and the brickmap cache entry
         // is marked as None.
@@ -270,13 +329,72 @@ impl BrickmapManager {
             }
         }
 
-        // We're safe to overwrite the CPU brickgrid and upload to gpu now
+        // We're safe to overwrite the CPU brickgrid and mark for GPU upload now
         self.brickgrid[index] = data;
+        self.brickgrid_staged.insert(index);
+    }
+
+    fn upload_unpack_buffers(&mut self, context: &render::Context) {
+        // Brickgrid
+        // TODO: Make this less shit??
+        let mut data = Vec::new();
+        let mut iter = self.brickgrid_staged.iter();
+        let mut to_remove = Vec::new();
+        for _ in 0..256 {
+            let el = iter.next();
+            if el.is_none() {
+                break;
+            }
+
+            let val = el.unwrap();
+            to_remove.push(*val as u32);
+            data.push(*val as u32);
+            data.push(self.brickgrid[*val]);
+        }
+        for val in &to_remove {
+            self.brickgrid_staged.remove(&(*val as usize));
+        }
+
+        if !data.is_empty() {
+            log::info!(
+                "Uploading {} brickgrid entries. ({} remaining)",
+                to_remove.len(),
+                self.brickgrid_staged.len()
+            );
+        }
+
         context.queue.write_buffer(
-            &self.brickgrid_buffer,
-            (index * 4).try_into().unwrap(),
-            bytemuck::cast_slice(&[data]),
+            &self.brickgrid_unpack_buffer,
+            4,
+            bytemuck::cast_slice(&[data.len()]),
         );
+        context.queue.write_buffer(
+            &self.brickgrid_unpack_buffer,
+            16,
+            bytemuck::cast_slice(&data),
+        );
+
+        // Brickmap
+        let end = 256.min(self.brickmap_staged.len());
+        let iter = self.brickmap_staged.drain(0..end);
+        let data = iter.as_slice();
+        context.queue.write_buffer(
+            &self.brickmap_unpack_buffer,
+            4,
+            bytemuck::cast_slice(&[end]),
+        );
+        context
+            .queue
+            .write_buffer(&self.brickmap_unpack_buffer, 16, bytemuck::cast_slice(data));
+        drop(iter);
+
+        if end > 0 {
+            log::info!(
+                "Uploading {} brickmap entries. ({} remaining)",
+                end,
+                self.brickmap_staged.len()
+            );
+        }
     }
 
     fn cull_interior_voxels(block: &[super::world::Voxel]) -> ([u32; 16], Vec<u32>) {
