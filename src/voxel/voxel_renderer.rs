@@ -185,10 +185,11 @@ impl render::Renderer for VoxelRenderer {
         compute_pass.dispatch_workgroups(size.width / 8, size.height / 8, 1);
         drop(compute_pass);
 
+        let unpack_max_count = self.brickmap_manager.get_unpack_max_count() as u32;
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         compute_pass.set_pipeline(&self.unpack_pipeline);
         compute_pass.set_bind_group(0, &self.unpack_bind_group, &[]);
-        compute_pass.dispatch_workgroups(256 / 8, 1, 1);
+        compute_pass.dispatch_workgroups(unpack_max_count / 8, 1, 1);
         drop(compute_pass);
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

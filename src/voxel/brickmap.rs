@@ -54,6 +54,7 @@ pub struct BrickmapManager {
     shading_table_allocator: ShadingTableAllocator,
     feedback_buffer: wgpu::Buffer,
     feedback_result_buffer: wgpu::Buffer,
+    unpack_max_count: usize,
     brickgrid_staged: HashSet<usize>,
     brickgrid_unpack_buffer: wgpu::Buffer,
     brickmap_staged: Vec<BrickmapUnpackElement>,
@@ -116,8 +117,9 @@ impl BrickmapManager {
             mapped_at_creation: false,
         });
 
-        let mut arr = vec![0u32; 516];
-        arr[0] = 256;
+        let unpack_max_count = 512;
+        let mut arr = vec![0u32; 4 + 2 * unpack_max_count];
+        arr[0] = unpack_max_count as u32;
         let brickgrid_staged = HashSet::new();
         let brickgrid_unpack_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -126,8 +128,8 @@ impl BrickmapManager {
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             });
 
-        let mut arr = vec![0u32; 136196];
-        arr[0] = 256;
+        let mut arr = vec![0u32; 4 + 532 * unpack_max_count];
+        arr[0] = unpack_max_count as u32;
         let brickmap_staged = Vec::new();
         let brickmap_unpack_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
@@ -147,6 +149,7 @@ impl BrickmapManager {
             shading_table_allocator,
             feedback_buffer,
             feedback_result_buffer,
+            unpack_max_count,
             brickgrid_staged,
             brickgrid_unpack_buffer,
             brickmap_staged,
@@ -184,6 +187,10 @@ impl BrickmapManager {
 
     pub fn get_brickgrid_unpack_buffer(&self) -> &wgpu::Buffer {
         &self.brickgrid_unpack_buffer
+    }
+
+    pub fn get_unpack_max_count(&self) -> usize {
+        self.unpack_max_count
     }
 
     pub fn process_feedback_buffer(
@@ -324,11 +331,10 @@ impl BrickmapManager {
 
     fn upload_unpack_buffers(&mut self, context: &render::Context) {
         // Brickgrid
-        // TODO: Make this less shit??
         let mut data = Vec::new();
         let mut iter = self.brickgrid_staged.iter();
         let mut to_remove = Vec::new();
-        for _ in 0..256 {
+        for _ in 0..self.unpack_max_count {
             let el = iter.next();
             if el.is_none() {
                 break;
@@ -363,7 +369,7 @@ impl BrickmapManager {
         );
 
         // Brickmap
-        let end = 256.min(self.brickmap_staged.len());
+        let end = self.unpack_max_count.min(self.brickmap_staged.len());
         let iter = self.brickmap_staged.drain(0..end);
         let data = iter.as_slice();
         context.queue.write_buffer(
