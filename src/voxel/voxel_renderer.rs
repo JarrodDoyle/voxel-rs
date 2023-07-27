@@ -68,6 +68,8 @@ impl VoxelRenderer {
             brickgrid_dims,
             usize::pow(32, 3),
             u32::pow(2, 24),
+            256,
+            512,
         );
 
         log::info!("Creating compute pipelines...");

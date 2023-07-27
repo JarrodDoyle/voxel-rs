@@ -69,6 +69,8 @@ impl BrickmapManager {
         brickgrid_dims: glam::UVec3,
         brickmap_cache_size: usize,
         shading_table_bucket_size: u32,
+        max_requested_brickmaps: u32,
+        max_uploaded_brickmaps: u32,
     ) -> Self {
         let device = &context.device;
 
@@ -106,35 +108,35 @@ impl BrickmapManager {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        let mut arr = [0u32; 1028];
-        arr[0] = 256;
+        let mut feedback_data = vec![0u32; 4 + 4 * max_requested_brickmaps as usize];
+        feedback_data[0] = max_requested_brickmaps;
+        let contents = bytemuck::cast_slice(&feedback_data);
         let feedback_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Feedback"),
-            contents: bytemuck::cast_slice(&arr),
+            contents,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
         });
         let feedback_result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Feedback Read"),
-            size: 1028 * 4,
+            size: contents.len() as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
 
-        let unpack_max_count = 512;
-        let mut arr = vec![0u32; 4 + 2 * unpack_max_count];
-        arr[0] = unpack_max_count as u32;
+        let mut feedback_data = vec![0u32; 4 + 4 * max_uploaded_brickmaps as usize];
+        feedback_data[0] = max_uploaded_brickmaps;
         let brickgrid_staged = HashSet::new();
         let brickgrid_unpack_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Brickgrid Unpack"),
-                contents: bytemuck::cast_slice(&arr),
+                contents: bytemuck::cast_slice(&feedback_data),
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             });
 
-        let mut arr = vec![0u32; 4 + 532 * unpack_max_count];
-        arr[0] = unpack_max_count as u32;
+        let mut arr = vec![0u32; 4 + 532 * max_uploaded_brickmaps as usize];
+        arr[0] = max_uploaded_brickmaps;
         let brickmap_staged = Vec::new();
         let brickmap_unpack_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Brickmap Unpack"),
@@ -154,7 +156,7 @@ impl BrickmapManager {
             shading_table_allocator,
             feedback_buffer,
             feedback_result_buffer,
-            unpack_max_count,
+            unpack_max_count: max_uploaded_brickmaps as usize,
             brickgrid_staged,
             brickgrid_unpack_buffer,
             brickmap_staged,
