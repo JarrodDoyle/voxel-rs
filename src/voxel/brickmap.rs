@@ -64,7 +64,12 @@ pub struct BrickmapManager {
 // TODO:
 // - Brickworld system
 impl BrickmapManager {
-    pub fn new(context: &render::Context, brickgrid_dims: glam::UVec3) -> Self {
+    pub fn new(
+        context: &render::Context,
+        brickgrid_dims: glam::UVec3,
+        brickmap_cache_size: usize,
+        shading_table_bucket_size: u32,
+    ) -> Self {
         let device = &context.device;
 
         let state_uniform = WorldState {
@@ -85,7 +90,7 @@ impl BrickmapManager {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        let brickmap_cache = vec![Brickmap::default(); usize::pow(32, 3)];
+        let brickmap_cache = vec![Brickmap::default(); brickmap_cache_size];
         let brickmap_cache_map = vec![None; brickmap_cache.capacity()];
         let brickmap_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Brickmap Cache"),
@@ -93,7 +98,7 @@ impl BrickmapManager {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        let shading_table_allocator = ShadingTableAllocator::new(4, u32::pow(2, 24));
+        let shading_table_allocator = ShadingTableAllocator::new(4, shading_table_bucket_size);
         let shading_table = vec![0u32; shading_table_allocator.total_elements as usize];
         let shading_table_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Shading Table"),

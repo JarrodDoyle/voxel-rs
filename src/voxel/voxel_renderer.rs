@@ -63,7 +63,12 @@ impl VoxelRenderer {
 
         log::info!("Creating brickmap manager...");
         let brickgrid_dims = glam::uvec3(64, 64, 64);
-        let brickmap_manager = super::brickmap::BrickmapManager::new(context, brickgrid_dims);
+        let brickmap_manager = super::brickmap::BrickmapManager::new(
+            context,
+            brickgrid_dims,
+            usize::pow(32, 3),
+            u32::pow(2, 24),
+        );
 
         log::info!("Creating compute pipelines...");
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/brickmap_upload.wgsl");
