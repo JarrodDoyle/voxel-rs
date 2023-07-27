@@ -32,8 +32,8 @@ impl App {
         let render_ctx = render::Context::new(
             &window,
             wgpu::Limits {
-                max_storage_buffer_binding_size: 1 << 29,
-                max_buffer_size: 1 << 29,
+                max_storage_buffer_binding_size: 1 << 30,
+                max_buffer_size: 1 << 30,
                 ..Default::default()
             },
         )
