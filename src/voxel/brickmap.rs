@@ -422,12 +422,12 @@ impl BrickmapManager {
                                 if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
                                     true
                                 } else {
-                                    !(block[idx + 1] == empty_voxel
-                                        && block[idx - 1] == empty_voxel
-                                        && block[idx + 8] == empty_voxel
-                                        && block[idx - 8] == empty_voxel
-                                        && block[idx + 64] == empty_voxel
-                                        && block[idx - 64] == empty_voxel)
+                                    center_block[idx + 1] == empty_voxel
+                                        || center_block[idx - 1] == empty_voxel
+                                        || center_block[idx + 8] == empty_voxel
+                                        || center_block[idx - 8] == empty_voxel
+                                        || center_block[idx + 64] == empty_voxel
+                                        || center_block[idx - 64] == empty_voxel
                                 };
 
                             // Set the appropriate bit in the z entry and add the
