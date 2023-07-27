@@ -239,7 +239,8 @@ impl BrickmapManager {
             // The CPU side World uses different terminology and coordinate system
             // We need to convert between Brickmap and World pos and get the relevant
             // World voxels
-            let block = Self::grid_pos_to_world_pos(world, grid_pos);
+            let (chunk_pos, block_pos) = Self::grid_pos_to_world_pos(world, grid_pos);
+            let block = world.get_block(chunk_pos, block_pos);
 
             // The World gives us the full voxel data for the requested block of voxels.
             // For Brickmap raytracing we only care about the visible surface voxels, so
@@ -457,7 +458,7 @@ impl BrickmapManager {
     fn grid_pos_to_world_pos(
         world: &mut super::world::WorldManager,
         grid_pos: glam::UVec3,
-    ) -> Vec<super::world::Voxel> {
+    ) -> (glam::IVec3, glam::UVec3) {
         let chunk_dims = world.get_chunk_dims();
         let chunk_pos = glam::ivec3(
             (grid_pos.x / chunk_dims.x) as i32,
@@ -465,9 +466,7 @@ impl BrickmapManager {
             (grid_pos.z / chunk_dims.z) as i32,
         );
         let block_pos = grid_pos % chunk_dims;
-        let block = world.get_block(chunk_pos, block_pos);
-        assert_eq!(block.len(), 512);
-        block
+        (chunk_pos, block_pos)
     }
 }
 
