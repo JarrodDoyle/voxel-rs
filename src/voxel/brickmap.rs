@@ -460,11 +460,7 @@ impl BrickmapManager {
         grid_pos: glam::UVec3,
     ) -> (glam::IVec3, glam::UVec3) {
         let chunk_dims = world.get_chunk_dims();
-        let chunk_pos = glam::ivec3(
-            (grid_pos.x / chunk_dims.x) as i32,
-            (grid_pos.y / chunk_dims.y) as i32,
-            (grid_pos.z / chunk_dims.z) as i32,
-        );
+        let chunk_pos = (grid_pos / chunk_dims).as_ivec3();
         let block_pos = grid_pos % chunk_dims;
         (chunk_pos, block_pos)
     }
