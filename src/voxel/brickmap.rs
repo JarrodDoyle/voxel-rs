@@ -239,7 +239,7 @@ impl BrickmapManager {
             // The CPU side World uses different terminology and coordinate system
             // We need to convert between Brickmap and World pos and get the relevant
             // World voxels
-            let (chunk_pos, block_pos) = Self::grid_pos_to_world_pos(world, grid_pos);
+            let (chunk_pos, block_pos) = Self::grid_pos_to_world_pos(world, grid_pos.as_ivec3());
             let block = world.get_block(chunk_pos, block_pos);
 
             // The World gives us the full voxel data for the requested block of voxels.
@@ -457,12 +457,14 @@ impl BrickmapManager {
 
     fn grid_pos_to_world_pos(
         world: &mut super::world::WorldManager,
-        grid_pos: glam::UVec3,
+        grid_pos: glam::IVec3,
     ) -> (glam::IVec3, glam::UVec3) {
-        let chunk_dims = world.get_chunk_dims();
-        let chunk_pos = (grid_pos / chunk_dims).as_ivec3();
-        let block_pos = grid_pos % chunk_dims;
-        (chunk_pos, block_pos)
+        // We deal with dvecs here because we want a negative grid_pos to have floored
+        // chunk_pos
+        let chunk_dims = world.get_chunk_dims().as_dvec3();
+        let chunk_pos = (grid_pos.as_dvec3() / chunk_dims).floor();
+        let block_pos = grid_pos - (chunk_pos * chunk_dims).as_ivec3();
+        (chunk_pos.as_ivec3(), block_pos.as_uvec3())
     }
 }
 
