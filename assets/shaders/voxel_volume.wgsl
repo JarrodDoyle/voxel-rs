@@ -39,6 +39,7 @@ struct HitInfo {
 struct AabbHitInfo {
     hit: bool,
     distance: f32,
+    normal: vec3<f32>,
 };
 
 struct Feedback {
@@ -67,20 +68,54 @@ fn get_shading_offset(hit: HitInfo) -> u32 {
     return (*brickmap).shading_table_offset + map_voxel_idx;
 }
 
+fn max_component(v: vec3<f32>) -> f32 {
+    return max(max(v.x, v.y), v.z);
+}
+
+fn less_than(a: vec2<f32>, b: vec2<f32>) -> vec2<bool> {
+    return vec2<bool>(a.x < b.x, a.y < b.y);
+}
+
 fn ray_intersect_aabb(
-    ray_pos: vec3<f32>,
+    orig_ray_pos: vec3<f32>,
     ray_dir: vec3<f32>,
     min: vec3<f32>,
     max: vec3<f32>
 ) -> AabbHitInfo {
-    let ray_dir_inv = 1.0 / ray_dir;
-    let t1 = (min - ray_pos) * ray_dir_inv;
-    let t2 = (max - ray_pos) * ray_dir_inv;
-    let t_min = min(t1, t2);
-    let t_max = max(t1, t2);
-    let tmin = max(max(t_min.x, 0.0), max(t_min.y, t_min.z));
-    let tmax = min(t_max.x, min(t_max.y, t_max.z));
-    return AabbHitInfo(tmax > tmin, tmin);
+    let radius = (max - min) * 0.5;
+    let center = min + radius;
+    let ray_pos = orig_ray_pos - center;
+    var winding = 1.0;
+    if (max_component(abs(ray_pos) * (1.0 / radius)) < 1.0) {
+        winding = -1.0;
+    }
+    var sgn = -sign(ray_dir);
+    let d = (radius * winding * sgn - ray_pos) * (1.0 / ray_dir);
+    let test = vec3<bool>(
+        (d.x >= 0.0) && all(less_than(abs(ray_pos.yz + ray_dir.yz * d.x), radius.yz)),
+        (d.y >= 0.0) && all(less_than(abs(ray_pos.zx + ray_dir.zx * d.y), radius.zx)),
+        (d.z >= 0.0) && all(less_than(abs(ray_pos.xy + ray_dir.xy * d.z), radius.xy))
+    );
+
+    if (test.x) {
+        sgn = vec3<f32>(sgn.x, 0.0, 0.0);
+    } else if (test.y) {
+        sgn = vec3<f32>(0.0, sgn.y, 0.0);
+    } else if (test.z) {
+        sgn = vec3<f32>(0.0, 0.0, sgn.z);
+    } else {
+        sgn = vec3<f32>(0.0, 0.0, 0.0);
+    }
+
+    var distance = 0.0;
+    if (sgn.x != 0.0) {
+        distance = d.x;
+    } else if (sgn.y != 0.0) {
+        distance = d.y;
+    } else if (sgn.z != 0.0) {
+        distance = d.z;
+    }
+    return AabbHitInfo((sgn.x != 0.0) || (sgn.y != 0.0) || (sgn.z != 0.0), distance * winding, sgn);
 }
 
 fn point_inside_aabb(p: vec3<i32>, min: vec3<i32>, max: vec3<i32>) -> bool {
@@ -116,7 +151,7 @@ fn brick_ray_cast(
         // tmin is greater than 0 if the ray is outside of the AABB, so we need to
         // accelerate the ray to be on the edge of the AABB.
         if (tmin > 0.0) {
-            ray_pos += ray_dir * (tmin + 0.0001);
+            ray_pos += ray_dir * tmin - aabbHit.normal * 0.0001;
         }
 
         // DDA setup
@@ -174,7 +209,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
         // tmin is greater than 0 if the ray is outside of the AABB, so we need to
         // accelerate the ray to be on the edge of the AABB.
         if (tmin > 0.0) {
-            ray_pos += ray_dir * (tmin + 0.0001);
+            ray_pos += ray_dir * tmin - aabbHit.normal * 0.0001;
         }
 
         // DDA setup
