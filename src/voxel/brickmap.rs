@@ -236,16 +236,34 @@ impl BrickmapManager {
                 glam::uvec3(grid_dims[0], grid_dims[1], grid_dims[2]),
             );
 
-            // The CPU side World uses different terminology and coordinate system
-            // We need to convert between Brickmap and World pos and get the relevant
-            // World voxels
-            let (chunk_pos, block_pos) = Self::grid_pos_to_world_pos(world, grid_pos.as_ivec3());
-            let block = world.get_block(chunk_pos, block_pos);
+            // Get block + neighbour blocks
+            // Cull based on that
+            let grid_pos = grid_pos.as_ivec3();
+            let center_pos = Self::grid_pos_to_world_pos(world, grid_pos);
+            let forward_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(1, 0, 0));
+            let backward_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(-1, 0, 0));
+            let left_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 0, -1));
+            let right_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 0, 1));
+            let up_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 1, 0));
+            let down_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, -1, 0));
 
-            // The World gives us the full voxel data for the requested block of voxels.
-            // For Brickmap raytracing we only care about the visible surface voxels, so
-            // we need to cull any interior voxels.
-            let (bitmask_data, albedo_data) = Self::cull_interior_voxels(&block);
+            let center_block = world.get_block(center_pos.0, center_pos.1);
+            let forward_block = world.get_block(forward_pos.0, forward_pos.1);
+            let backward_block = world.get_block(backward_pos.0, backward_pos.1);
+            let left_block = world.get_block(left_pos.0, left_pos.1);
+            let right_block = world.get_block(right_pos.0, right_pos.1);
+            let up_block = world.get_block(up_pos.0, up_pos.1);
+            let down_block = world.get_block(down_pos.0, down_pos.1);
+
+            let (bitmask_data, albedo_data) = Self::cull_interior_voxels(
+                &center_block,
+                &forward_block,
+                &backward_block,
+                &left_block,
+                &right_block,
+                &up_block,
+                &down_block,
+            );
 
             // If there's no voxel colour data post-culling it means the brickmap is
             // empty. We don't need to upload it, just mark the relevant brickgrid entry.
@@ -399,9 +417,23 @@ impl BrickmapManager {
         }
     }
 
-    fn cull_interior_voxels(block: &[super::world::Voxel]) -> ([u32; 16], Vec<u32>) {
+    // TODO: Account for neighbours in other blocks
+    // - We should operate on a halo block
+    // - The world should be responsible for providing a halo perhaps
+    // - Or rather, perhaps we should just be able to request a range of voxels from the world
+    // and it will just work out which "blocks" it needs to give us them
+    fn cull_interior_voxels(
+        center_block: &[super::world::Voxel],
+        forward_block: &[super::world::Voxel],
+        backward_block: &[super::world::Voxel],
+        left_block: &[super::world::Voxel],
+        right_block: &[super::world::Voxel],
+        up_block: &[super::world::Voxel],
+        down_block: &[super::world::Voxel],
+    ) -> ([u32; 16], Vec<u32>) {
         let mut bitmask_data = [0xFFFFFFFF_u32; 16];
         let mut albedo_data = Vec::<u32>::new();
+        let mut neighbours = [false; 6];
         for z in 0..8 {
             // Each z level contains two bitmask segments of voxels
             let mut entry = 0u64;
@@ -411,24 +443,48 @@ impl BrickmapManager {
                     let idx = x + y * 8 + z * 8 * 8;
                     let empty_voxel = super::world::Voxel::Empty;
 
-                    match block[idx] {
+                    match center_block[idx] {
                         super::world::Voxel::Empty => continue,
                         super::world::Voxel::Color(r, g, b) => {
                             // A voxel is on the surface if at least one of it's
-                            // cardinal neighbours is non-solid. Also for simplicity
-                            // if it's on the edge of the chunk
-                            // TODO: Account for neighbours in other blocks
-                            let surface_voxel =
-                                if x == 0 || x == 7 || y == 0 || y == 7 || z == 0 || z == 7 {
-                                    true
-                                } else {
-                                    center_block[idx + 1] == empty_voxel
-                                        || center_block[idx - 1] == empty_voxel
-                                        || center_block[idx + 8] == empty_voxel
-                                        || center_block[idx - 8] == empty_voxel
-                                        || center_block[idx + 64] == empty_voxel
-                                        || center_block[idx - 64] == empty_voxel
-                                };
+                            // cardinal neighbours is non-solid.
+                            neighbours[0] = if x == 7 {
+                                forward_block[idx - 7] == empty_voxel
+                            } else {
+                                center_block[idx + 1] == empty_voxel
+                            };
+
+                            neighbours[1] = if x == 0 {
+                                backward_block[idx + 7] == empty_voxel
+                            } else {
+                                center_block[idx - 1] == empty_voxel
+                            };
+
+                            neighbours[2] = if z == 7 {
+                                right_block[idx - 448] == empty_voxel
+                            } else {
+                                center_block[idx + 64] == empty_voxel
+                            };
+
+                            neighbours[3] = if z == 0 {
+                                left_block[idx + 448] == empty_voxel
+                            } else {
+                                center_block[idx - 64] == empty_voxel
+                            };
+
+                            neighbours[4] = if y == 7 {
+                                up_block[idx - 56] == empty_voxel
+                            } else {
+                                center_block[idx + 8] == empty_voxel
+                            };
+
+                            neighbours[5] = if y == 0 {
+                                down_block[idx + 56] == empty_voxel
+                            } else {
+                                center_block[idx - 8] == empty_voxel
+                            };
+
+                            let surface_voxel = neighbours.iter().any(|v| *v);
 
                             // Set the appropriate bit in the z entry and add the
                             // shading data
