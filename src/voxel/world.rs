@@ -15,9 +15,9 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    fn get_block(&mut self, pos: glam::UVec3, chunk_dims: glam::UVec3) -> Vec<Voxel> {
+    fn get_block(&mut self, block_pos: glam::UVec3, chunk_dims: glam::UVec3) -> Vec<Voxel> {
         let noise_dims = chunk_dims + glam::uvec3(1, 1, 1);
-        let block_idx = math::to_1d_index(pos, chunk_dims);
+        let block_idx = math::to_1d_index(block_pos, chunk_dims);
         assert_eq!(
             self.blocks.len(),
             (chunk_dims.x * chunk_dims.y * chunk_dims.z) as usize
@@ -27,7 +27,7 @@ impl Chunk {
         if !block.is_empty() {
             block.to_owned()
         } else {
-            self.gen_block(pos, block_idx, noise_dims);
+            self.gen_block(block_pos, block_idx, noise_dims);
             self.blocks[block_idx].to_owned()
         }
     }
