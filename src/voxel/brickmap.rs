@@ -236,34 +236,10 @@ impl BrickmapManager {
                 glam::uvec3(grid_dims[0], grid_dims[1], grid_dims[2]),
             );
 
-            // Get block + neighbour blocks
-            // Cull based on that
+            // We only want to upload voxels that are on the surface, so we cull anything
+            // that is surrounded by solid voxels
             let grid_pos = grid_pos.as_ivec3();
-            let center_pos = Self::grid_pos_to_world_pos(world, grid_pos);
-            let forward_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(1, 0, 0));
-            let backward_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(-1, 0, 0));
-            let left_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 0, -1));
-            let right_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 0, 1));
-            let up_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 1, 0));
-            let down_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, -1, 0));
-
-            let center_block = world.get_block(center_pos.0, center_pos.1);
-            let forward_block = world.get_block(forward_pos.0, forward_pos.1);
-            let backward_block = world.get_block(backward_pos.0, backward_pos.1);
-            let left_block = world.get_block(left_pos.0, left_pos.1);
-            let right_block = world.get_block(right_pos.0, right_pos.1);
-            let up_block = world.get_block(up_pos.0, up_pos.1);
-            let down_block = world.get_block(down_pos.0, down_pos.1);
-
-            let (bitmask_data, albedo_data) = Self::cull_interior_voxels(
-                &center_block,
-                &forward_block,
-                &backward_block,
-                &left_block,
-                &right_block,
-                &up_block,
-                &down_block,
-            );
+            let (bitmask_data, albedo_data) = Self::cull_interior_voxels(world, grid_pos);
 
             // If there's no voxel colour data post-culling it means the brickmap is
             // empty. We don't need to upload it, just mark the relevant brickgrid entry.
@@ -417,22 +393,33 @@ impl BrickmapManager {
         }
     }
 
-    // TODO: Account for neighbours in other blocks
-    // - We should operate on a halo block
-    // - The world should be responsible for providing a halo perhaps
-    // - Or rather, perhaps we should just be able to request a range of voxels from the world
-    // and it will just work out which "blocks" it needs to give us them
     fn cull_interior_voxels(
-        center_block: &[super::world::Voxel],
-        forward_block: &[super::world::Voxel],
-        backward_block: &[super::world::Voxel],
-        left_block: &[super::world::Voxel],
-        right_block: &[super::world::Voxel],
-        up_block: &[super::world::Voxel],
-        down_block: &[super::world::Voxel],
+        world: &mut super::world::WorldManager,
+        grid_pos: glam::IVec3,
     ) -> ([u32; 16], Vec<u32>) {
+        // This is the data we want to return
         let mut bitmask_data = [0xFFFFFFFF_u32; 16];
         let mut albedo_data = Vec::<u32>::new();
+
+        // Calculate world chunk and block positions for each that may be accessed
+        let center_pos = Self::grid_pos_to_world_pos(world, grid_pos);
+        let forward_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(1, 0, 0));
+        let backward_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(-1, 0, 0));
+        let left_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 0, -1));
+        let right_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 0, 1));
+        let up_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, 1, 0));
+        let down_pos = Self::grid_pos_to_world_pos(world, grid_pos + glam::ivec3(0, -1, 0));
+
+        // Fetch those blocks
+        let center_block = world.get_block(center_pos.0, center_pos.1);
+        let forward_block = world.get_block(forward_pos.0, forward_pos.1);
+        let backward_block = world.get_block(backward_pos.0, backward_pos.1);
+        let left_block = world.get_block(left_pos.0, left_pos.1);
+        let right_block = world.get_block(right_pos.0, right_pos.1);
+        let up_block = world.get_block(up_pos.0, up_pos.1);
+        let down_block = world.get_block(down_pos.0, down_pos.1);
+
+        //  Reusable array of whether cardinal neighbours are empty
         let mut neighbours = [false; 6];
         for z in 0..8 {
             // Each z level contains two bitmask segments of voxels
@@ -484,10 +471,9 @@ impl BrickmapManager {
                                 center_block[idx - 8] == empty_voxel
                             };
 
-                            let surface_voxel = neighbours.iter().any(|v| *v);
-
                             // Set the appropriate bit in the z entry and add the
                             // shading data
+                            let surface_voxel = neighbours.iter().any(|v| *v);
                             if surface_voxel {
                                 entry += 1 << (x + y * 8);
                                 let albedo = ((r as u32) << 24)
@@ -504,6 +490,7 @@ impl BrickmapManager {
             bitmask_data[offset] = (entry & 0xFFFFFFFF).try_into().unwrap();
             bitmask_data[offset + 1] = ((entry >> 32) & 0xFFFFFFFF).try_into().unwrap();
         }
+
         (bitmask_data, albedo_data)
     }
 
