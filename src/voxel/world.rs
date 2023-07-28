@@ -16,24 +16,24 @@ pub struct Chunk {
 
 impl Chunk {
     fn get_block(&mut self, block_pos: glam::UVec3, chunk_dims: glam::UVec3) -> Vec<Voxel> {
-        let noise_dims = chunk_dims + glam::uvec3(1, 1, 1);
-        let block_idx = math::to_1d_index(block_pos, chunk_dims);
         assert_eq!(
             self.blocks.len(),
             (chunk_dims.x * chunk_dims.y * chunk_dims.z) as usize
         );
 
-        let block = &self.blocks[block_idx];
-        if !block.is_empty() {
-            block.to_owned()
-        } else {
-            self.gen_block(block_pos, block_idx, noise_dims);
-            self.blocks[block_idx].to_owned()
+        let block_idx = math::to_1d_index(block_pos, chunk_dims);
+        let mut block = &self.blocks[block_idx];
+        if block.is_empty() {
+            self.gen_block(block_pos, block_idx, chunk_dims);
+            block = &self.blocks[block_idx]
         }
+
+        block.to_owned()
     }
 
-    fn gen_block(&mut self, block_pos: glam::UVec3, block_idx: usize, noise_dims: glam::UVec3) {
+    fn gen_block(&mut self, block_pos: glam::UVec3, block_idx: usize, chunk_dims: glam::UVec3) {
         let block = &mut self.blocks[block_idx];
+        let noise_dims = chunk_dims + glam::uvec3(1, 1, 1);
 
         // Extract relevant noise values from the chunk
         let mut noise_vals = Vec::new();
