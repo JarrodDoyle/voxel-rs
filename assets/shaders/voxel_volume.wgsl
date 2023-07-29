@@ -50,6 +50,41 @@ struct Feedback {
     positions: array<vec4<i32>>,
 }
 
+struct DdaState {
+    delta_dist: vec3<f32>,
+    ray_step: vec3<i32>,
+    map_pos: vec3<i32>,
+    side_dist: vec3<f32>,
+    side_mask: vec3<bool>, 
+}
+
+fn dda_setup(ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> DdaState {
+    let delta_dist = abs(length(ray_dir) / ray_dir);
+    let ray_step = vec3<i32>(sign(ray_dir));
+    let map_pos = vec3<i32>(floor(ray_pos));
+    let side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
+    return DdaState(delta_dist, ray_step, map_pos, side_dist, vec3<bool>(false, false, false));
+}
+
+fn dda_step(state: ptr<function, DdaState>) {
+    // Update hit side mask
+    let side_dist = (*state).side_dist;
+    let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
+    if (smallest == side_dist.x) {
+        (*state).side_mask = vec3<bool>(true, false, false);
+    }
+    else if (smallest == side_dist.y) {
+        (*state).side_mask = vec3<bool>(false, true, false);
+    }
+    else {
+        (*state).side_mask = vec3<bool>(false, false, true);
+    }
+
+    // Step the ray based on which voxel side we're on
+    (*state).side_dist += vec3<f32>((*state).side_mask) * (*state).delta_dist;
+    (*state).map_pos += vec3<i32>((*state).side_mask) * (*state).ray_step;
+}
+
 // Utility function. Converts a position in 3d to a 1d index.
 fn to_1d_index(p: vec3<i32>, dims: vec3<i32>) -> u32 {
     return u32(p.x + p.y * dims.x + p.z * dims.x * dims.y);
@@ -139,58 +174,38 @@ fn brick_ray_cast(
     ray_dir: vec3<f32>
 ) -> HitInfo {
     var hit_info = HitInfo(false, vec3<i32>(0), 0u, vec3<bool>(false));
-
     var ray_pos = orig_ray_pos * 8.0;
 
     let min = vec3<f32>(chunk_pos * 8);
     let max = min + vec3<f32>(8.0);
     let aabbHit = ray_intersect_aabb(ray_pos, ray_dir, min, max);
-    var tmin = aabbHit.distance;
-
     if (aabbHit.hit) {
-        // tmin is greater than 0 if the ray is outside of the AABB, so we need to
+        // distance is greater than 0 if the ray is outside of the AABB, so we need to
         // accelerate the ray to be on the edge of the AABB.
-        if (tmin > 0.0) {
-            ray_pos += ray_dir * tmin - aabbHit.normal * 0.0001;
+        if (aabbHit.distance > 0.0) {
+            ray_pos += ray_dir * aabbHit.distance - aabbHit.normal * 0.0001;
         }
 
-        // DDA setup
-        let delta_dist = abs(length(ray_dir) / ray_dir);
-        let ray_step = vec3<i32>(sign(ray_dir));
-        var map_pos = vec3<i32>(floor(ray_pos));
-        var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
-        map_pos = map_pos % 8;
+        var dda_state = dda_setup(ray_pos, ray_dir);
+        dda_state.map_pos = dda_state.map_pos % 8;
 
         let max_brick_depth = 8 + 8 + 8;
         for (var i: i32 = 0; i < max_brick_depth; i++) {
-            if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(8))) {
+            if (!point_inside_aabb(dda_state.map_pos, vec3<i32>(0), vec3<i32>(8))) {
                 // If the ray has left the brickmap AABB there's no point in continuing
                 // to trace against it
                 break;
             }
 
-            if (voxel_hit(brickmap_idx, map_pos)){
+            if (voxel_hit(brickmap_idx, dda_state.map_pos)){
                 hit_info.hit = true;
-                hit_info.hit_pos = map_pos;
+                hit_info.hit_pos = dda_state.map_pos;
                 hit_info.brickmap_idx = brickmap_idx;
                 break;
             }
 
-            // What side of the voxel are we on?
-            let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
-            if (smallest == side_dist.x) {
-                hit_info.mask = vec3<bool>(true, false, false);
-            }
-            else if (smallest == side_dist.y) {
-                hit_info.mask = vec3<bool>(false, true, false);
-            }
-            else {
-                hit_info.mask = vec3<bool>(false, false, true);
-            }
-
-            // Step the ray based on which voxel side we're on
-            side_dist += vec3<f32>(hit_info.mask) * delta_dist;
-            map_pos += vec3<i32>(hit_info.mask) * ray_step;
+            dda_step(&dda_state);
+            hit_info.mask = dda_state.side_mask;
         }
     }
 
@@ -204,30 +219,25 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
     let max = min + vec3<f32>(world_state.brickgrid_dims);
     let aabbHit = ray_intersect_aabb(orig_ray_pos, ray_dir, min, max);
     var ray_pos = orig_ray_pos;
-    var tmin = aabbHit.distance;
     if (aabbHit.hit) {
-        // tmin is greater than 0 if the ray is outside of the AABB, so we need to
+        // distance is greater than 0 if the ray is outside of the AABB, so we need to
         // accelerate the ray to be on the edge of the AABB.
-        if (tmin > 0.0) {
-            ray_pos += ray_dir * tmin - aabbHit.normal * 0.0001;
+        if (aabbHit.distance > 0.0) {
+            ray_pos += ray_dir * aabbHit.distance - aabbHit.normal * 0.0001;
         }
 
-        // DDA setup
-        let delta_dist = abs(length(ray_dir) / ray_dir);
-        let ray_step = vec3<i32>(sign(ray_dir));
-        var map_pos = vec3<i32>(floor(ray_pos));
-        var side_dist = (sign(ray_dir) * (vec3<f32>(map_pos) - ray_pos) + (sign(ray_dir) * 0.5) + 0.5) * delta_dist;
+        var dda_state = dda_setup(ray_pos, ray_dir);
 
         let dims = world_state.brickgrid_dims;
         let max_grid_depth = i32(dims.x + dims.y + dims.z);
         for (var i: i32 = 0; i < max_grid_depth; i++) {
-            if (!point_inside_aabb(map_pos, vec3<i32>(0), vec3<i32>(world_state.brickgrid_dims))) {
+            if (!point_inside_aabb(dda_state.map_pos, vec3<i32>(0), vec3<i32>(world_state.brickgrid_dims))) {
                 // If the ray has left the brickmap AABB there's no point in continuing
                 // to trace against it
                 break;
             }
 
-            let grid_idx = to_1d_index(map_pos, vec3<i32>(world_state.brickgrid_dims));
+            let grid_idx = to_1d_index(dda_state.map_pos, vec3<i32>(world_state.brickgrid_dims));
             let brick_ptr = brickgrid[grid_idx];
             
             // Ptr = 28 bits LOD colour / brickmap index + 4 bits load flags
@@ -249,7 +259,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
                         // brickmap. Otherwise, revert any changes made
                         let index = atomicAdd(&cpu_feedback.count, 1u);
                         if (index < cpu_feedback.max_count) {
-                            cpu_feedback.positions[index] = vec4<i32>(map_pos, 0);
+                            cpu_feedback.positions[index] = vec4<i32>(dda_state.map_pos, 0);
                         }
                         else {
                             atomicSub(&cpu_feedback.count, 1u);
@@ -264,33 +274,20 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
             else if flags == 4u {
                 // The brickmap is loaded so we try and cast against it
                 let brickmap_idx = brick_ptr >> 8u;
-                let tmp_voxel_hit = brick_ray_cast(map_pos, brickmap_idx, orig_ray_pos, ray_dir);
+                let tmp_voxel_hit = brick_ray_cast(dda_state.map_pos, brickmap_idx, orig_ray_pos, ray_dir);
 
                 // If we hit a voxel in the brickmap, update hitinfo and stop casting
                 if (tmp_voxel_hit.hit == true){
                     hit_info.hit = tmp_voxel_hit.hit;
-                    hit_info.hit_pos = tmp_voxel_hit.hit_pos + (map_pos * 8);
+                    hit_info.hit_pos = tmp_voxel_hit.hit_pos + (dda_state.map_pos * 8);
                     hit_info.mask = tmp_voxel_hit.mask;
                     hit_info.brickmap_idx = tmp_voxel_hit.brickmap_idx;
                     break;
                 }
             }
 
-            // What side of the voxel are we on?
-            let smallest = min(side_dist.x, min(side_dist.y, side_dist.z));
-            if (smallest == side_dist.x) {
-                hit_info.mask = vec3<bool>(true, false, false);
-            }
-            else if (smallest == side_dist.y) {
-                hit_info.mask = vec3<bool>(false, true, false);
-            }
-            else {
-                hit_info.mask = vec3<bool>(false, false, true);
-            }
-
-            // Step the ray based on which voxel side we're on
-            side_dist += vec3<f32>(hit_info.mask) * delta_dist;
-            map_pos += vec3<i32>(hit_info.mask) * ray_step;
+            dda_step(&dda_state);
+            hit_info.mask = dda_state.side_mask;
         }
     }
 
