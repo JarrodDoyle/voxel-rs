@@ -17,7 +17,7 @@ impl<'a> BulkBufferBuilder<'a> {
         }
     }
 
-    pub fn with_usage(mut self, usage: wgpu::BufferUsages) -> Self {
+    pub fn set_usage(mut self, usage: wgpu::BufferUsages) -> Self {
         self.current_usage = usage;
         self
     }

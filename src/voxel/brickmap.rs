@@ -111,13 +111,13 @@ impl BrickmapManager {
 
         let mut buffers = gfx::BulkBufferBuilder::new()
             .with_bytemuck_buffer("Brick World State", &[state_uniform])
-            .with_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
+            .set_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
             .with_bytemuck_buffer("Brickgrid", &brickgrid)
             .with_bytemuck_buffer("Brickmap Cache", &brickmap_cache)
             .with_bytemuck_buffer("Shading Table", &shading_table)
             .with_bytemuck_buffer("Brickgrid Unpack", &brickgrid_upload_data)
             .with_bytemuck_buffer("Brickmap Unpack", &brickmap_upload_data)
-            .with_usage(
+            .set_usage(
                 wgpu::BufferUsages::STORAGE
                     | wgpu::BufferUsages::COPY_DST
                     | wgpu::BufferUsages::COPY_SRC,
