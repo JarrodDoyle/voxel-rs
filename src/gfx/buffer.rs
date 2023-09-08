@@ -33,7 +33,7 @@ impl<'a> BulkBufferBuilder<'a> {
         self
     }
 
-    pub fn with_bytemuck_buffer<A: NoUninit>(mut self, label: &'a str, contents: &'a [A]) -> Self {
+    pub fn with_bytemuck_buffer<A: NoUninit>(self, label: &'a str, contents: &'a [A]) -> Self {
         self.with_buffer(label, bytemuck::cast_slice(contents))
     }
 
