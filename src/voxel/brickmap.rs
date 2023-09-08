@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use wgpu::util::DeviceExt;
-
 use crate::{
     gfx::{self},
     math,
