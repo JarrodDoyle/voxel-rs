@@ -35,9 +35,9 @@ struct BrickmapUnpackElement {
 }
 
 enum BrickgridFlag {
-    Empty = 0,
-    Unloaded = 1,
-    Loading = 2,
+    _Empty = 0,
+    _Unloaded = 1,
+    _Loading = 2,
     Loaded = 4,
 }
 
