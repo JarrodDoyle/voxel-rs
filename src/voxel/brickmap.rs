@@ -92,12 +92,6 @@ impl BrickmapManager {
         let mut feedback_data = vec![0u32; 4 + 4 * max_requested_brickmaps as usize];
         feedback_data[0] = max_requested_brickmaps;
         let feedback_data_u8 = bytemuck::cast_slice(&feedback_data);
-        let feedback_result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Feedback Read"),
-            size: feedback_data_u8.len() as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
 
         let mut brickgrid_upload_data = vec![0u32; 4 + 4 * max_uploaded_brickmaps as usize];
         brickgrid_upload_data[0] = max_uploaded_brickmaps;
@@ -108,19 +102,21 @@ impl BrickmapManager {
         let brickmap_staged = Vec::new();
 
         let mut buffers = gfx::BulkBufferBuilder::new()
-            .with_bytemuck_buffer("Brick World State", &[state_uniform])
+            .with_init_buffer_bm("Brick World State", &[state_uniform])
             .set_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
-            .with_bytemuck_buffer("Brickgrid", &brickgrid)
-            .with_bytemuck_buffer("Brickmap Cache", &brickmap_cache)
-            .with_bytemuck_buffer("Shading Table", &shading_table)
-            .with_bytemuck_buffer("Brickgrid Unpack", &brickgrid_upload_data)
-            .with_bytemuck_buffer("Brickmap Unpack", &brickmap_upload_data)
+            .with_init_buffer_bm("Brickgrid", &brickgrid)
+            .with_init_buffer_bm("Brickmap Cache", &brickmap_cache)
+            .with_init_buffer_bm("Shading Table", &shading_table)
+            .with_init_buffer_bm("Brickgrid Unpack", &brickgrid_upload_data)
+            .with_init_buffer_bm("Brickmap Unpack", &brickmap_upload_data)
             .set_usage(
                 wgpu::BufferUsages::STORAGE
                     | wgpu::BufferUsages::COPY_DST
                     | wgpu::BufferUsages::COPY_SRC,
             )
-            .with_buffer("Feedback", feedback_data_u8)
+            .with_init_buffer("Feedback", feedback_data_u8)
+            .set_usage(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ)
+            .with_buffer("Feedback Read", feedback_data_u8.len() as u64, false)
             .build(context);
 
         Self {
@@ -129,7 +125,6 @@ impl BrickmapManager {
             brickmap_cache_map,
             brickmap_cache_idx: 0,
             shading_table_allocator,
-            feedback_result_buffer,
             unpack_max_count: max_uploaded_brickmaps as usize,
             brickgrid_staged,
             brickmap_staged,
@@ -141,6 +136,7 @@ impl BrickmapManager {
             brickgrid_unpack_buffer: buffers.remove(0),
             brickmap_unpack_buffer: buffers.remove(0),
             feedback_buffer: buffers.remove(0),
+            feedback_result_buffer: buffers.remove(0),
         }
     }
 
