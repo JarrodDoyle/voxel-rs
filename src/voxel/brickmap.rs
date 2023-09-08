@@ -1,9 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{
-    gfx::{self},
-    math,
-};
+use crate::{gfx, math};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -73,8 +70,6 @@ impl BrickmapManager {
         max_requested_brickmaps: u32,
         max_uploaded_brickmaps: u32,
     ) -> Self {
-        let device = &context.device;
-
         let state_uniform = WorldState {
             brickgrid_dims: [brickgrid_dims.x, brickgrid_dims.y, brickgrid_dims.z],
             ..Default::default()
