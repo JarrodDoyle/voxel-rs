@@ -1,6 +1,6 @@
 mod core;
+mod gfx;
 mod math;
-mod render;
 mod voxel;
 
 fn main() {

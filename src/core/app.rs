@@ -7,7 +7,7 @@ use winit::{
 
 use super::camera;
 use crate::{
-    render::{self, Renderer},
+    gfx::{self, Renderer},
     voxel,
 };
 
@@ -15,7 +15,7 @@ pub struct App {
     title: String,
     window: winit::window::Window,
     event_loop: EventLoop<()>,
-    render_ctx: render::Context,
+    render_ctx: gfx::Context,
 }
 
 impl App {
@@ -29,7 +29,7 @@ impl App {
             .build(&event_loop)
             .unwrap();
 
-        let render_ctx = render::Context::new(
+        let render_ctx = gfx::Context::new(
             &window,
             wgpu::Limits {
                 max_storage_buffer_binding_size: 1 << 30,

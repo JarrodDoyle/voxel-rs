@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use wgpu::util::DeviceExt;
 
-use crate::{math, render};
+use crate::{gfx, math};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -65,7 +65,7 @@ pub struct BrickmapManager {
 // - Brickworld system
 impl BrickmapManager {
     pub fn new(
-        context: &render::Context,
+        context: &gfx::Context,
         brickgrid_dims: glam::UVec3,
         brickmap_cache_size: usize,
         shading_table_bucket_size: u32,
@@ -202,7 +202,7 @@ impl BrickmapManager {
 
     pub fn process_feedback_buffer(
         &mut self,
-        context: &render::Context,
+        context: &gfx::Context,
         world: &mut super::world::WorldManager,
     ) {
         // Get request count
@@ -331,7 +331,7 @@ impl BrickmapManager {
         self.brickgrid_staged.insert(index);
     }
 
-    fn upload_unpack_buffers(&mut self, context: &render::Context) {
+    fn upload_unpack_buffers(&mut self, context: &gfx::Context) {
         // Brickgrid
         let mut data = Vec::new();
         let mut iter = self.brickgrid_staged.iter();

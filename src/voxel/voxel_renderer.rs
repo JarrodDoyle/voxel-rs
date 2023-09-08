@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use crate::{core, render};
+use crate::{core, gfx};
 
 #[derive(Debug)]
 pub struct VoxelRenderer {
     clear_color: wgpu::Color,
-    render_texture: render::Texture,
+    render_texture: gfx::Texture,
     render_pipeline: wgpu::RenderPipeline,
     brickmap_manager: super::brickmap::BrickmapManager,
     raycast_pipeline: wgpu::ComputePipeline,
@@ -15,13 +15,13 @@ pub struct VoxelRenderer {
 }
 
 impl VoxelRenderer {
-    pub fn new(context: &render::Context, camera_controller: &core::CameraController) -> Self {
+    pub fn new(context: &gfx::Context, camera_controller: &core::CameraController) -> Self {
         log::info!("Creating render shader...");
         let shader_descriptor = wgpu::include_wgsl!("../../assets/shaders/shader.wgsl");
         let shader = context.device.create_shader_module(shader_descriptor);
 
         log::info!("Creating render texture...");
-        let render_texture = render::TextureBuilder::new()
+        let render_texture = gfx::TextureBuilder::new()
             .with_size(context.size.width, context.size.height, 1)
             .with_format(wgpu::TextureFormat::Rgba8Unorm)
             .with_usage(
@@ -74,7 +74,7 @@ impl VoxelRenderer {
         log::info!("Creating compute pipelines...");
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/brickmap_upload.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
-        let unpack_layout = render::BindGroupLayoutBuilder::new()
+        let unpack_layout = gfx::BindGroupLayoutBuilder::new()
             .with_label("GPU Unpack BGL")
             .with_uniform_entry(wgpu::ShaderStages::COMPUTE)
             .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
@@ -83,7 +83,7 @@ impl VoxelRenderer {
             .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
             .with_ro_storage_entry(wgpu::ShaderStages::COMPUTE)
             .build(context);
-        let unpack_bind_group = render::BindGroupBuilder::new()
+        let unpack_bind_group = gfx::BindGroupBuilder::new()
             .with_label("GPU Unpack BG")
             .with_layout(&unpack_layout)
             .with_entry(brickmap_manager.get_worldstate_buffer().as_entire_binding())
@@ -119,7 +119,7 @@ impl VoxelRenderer {
 
         let cs_descriptor = wgpu::include_wgsl!("../../assets/shaders/voxel_volume.wgsl");
         let cs = context.device.create_shader_module(cs_descriptor);
-        let raycast_layout = render::BindGroupLayoutBuilder::new()
+        let raycast_layout = gfx::BindGroupLayoutBuilder::new()
             .with_label("Voxel Raycast BGL")
             .with_entry(
                 wgpu::ShaderStages::COMPUTE,
@@ -137,7 +137,7 @@ impl VoxelRenderer {
             .with_rw_storage_entry(wgpu::ShaderStages::COMPUTE)
             .with_uniform_entry(wgpu::ShaderStages::COMPUTE)
             .build(context);
-        let raycast_bind_group = render::BindGroupBuilder::new()
+        let raycast_bind_group = gfx::BindGroupBuilder::new()
             .with_label("Voxel Raycast BG")
             .with_layout(&raycast_layout)
             .with_entry(wgpu::BindingResource::TextureView(&render_texture.view))
@@ -177,8 +177,8 @@ impl VoxelRenderer {
     }
 }
 
-impl render::Renderer for VoxelRenderer {
-    fn render(&self, context: &render::Context) {
+impl gfx::Renderer for VoxelRenderer {
+    fn render(&self, context: &gfx::Context) {
         let frame = context.surface.get_current_texture().unwrap();
         let view = frame
             .texture
@@ -232,13 +232,13 @@ impl render::Renderer for VoxelRenderer {
         frame.present();
     }
 
-    fn update(&mut self, _dt: &Duration, _context: &render::Context) {}
+    fn update(&mut self, _dt: &Duration, _context: &gfx::Context) {}
 }
 
 impl VoxelRenderer {
     pub fn update_brickmap(
         &mut self,
-        context: &render::Context,
+        context: &gfx::Context,
         world: &mut super::world::WorldManager,
     ) {
         self.brickmap_manager
