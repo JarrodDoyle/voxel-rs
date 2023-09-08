@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use wgpu::util::DeviceExt;
 
-use crate::{gfx, math};
+use crate::{
+    gfx::{self},
+    math,
+};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -78,89 +81,68 @@ impl BrickmapManager {
             brickgrid_dims: [brickgrid_dims.x, brickgrid_dims.y, brickgrid_dims.z],
             ..Default::default()
         };
-        let state_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Brick World State"),
-            contents: bytemuck::cast_slice(&[state_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
 
         let brickgrid =
             vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
-        let brickgrid_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Brickgrid"),
-            contents: bytemuck::cast_slice(&brickgrid),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
 
         let brickmap_cache = vec![Brickmap::default(); brickmap_cache_size];
         let brickmap_cache_map = vec![None; brickmap_cache.capacity()];
-        let brickmap_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Brickmap Cache"),
-            contents: bytemuck::cast_slice(&brickmap_cache),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
 
         let shading_table_allocator = ShadingTableAllocator::new(4, shading_table_bucket_size);
         let shading_table = vec![0u32; shading_table_allocator.total_elements as usize];
-        let shading_table_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Shading Table"),
-            contents: bytemuck::cast_slice(&shading_table),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
 
         let mut feedback_data = vec![0u32; 4 + 4 * max_requested_brickmaps as usize];
         feedback_data[0] = max_requested_brickmaps;
-        let contents = bytemuck::cast_slice(&feedback_data);
-        let feedback_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Feedback"),
-            contents,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
-        });
+        let feedback_data_u8 = bytemuck::cast_slice(&feedback_data);
         let feedback_result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Feedback Read"),
-            size: contents.len() as u64,
+            size: feedback_data_u8.len() as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
 
-        let mut feedback_data = vec![0u32; 4 + 4 * max_uploaded_brickmaps as usize];
-        feedback_data[0] = max_uploaded_brickmaps;
+        let mut brickgrid_upload_data = vec![0u32; 4 + 4 * max_uploaded_brickmaps as usize];
+        brickgrid_upload_data[0] = max_uploaded_brickmaps;
         let brickgrid_staged = HashSet::new();
-        let brickgrid_unpack_buffer =
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Brickgrid Unpack"),
-                contents: bytemuck::cast_slice(&feedback_data),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
 
-        let mut arr = vec![0u32; 4 + 532 * max_uploaded_brickmaps as usize];
-        arr[0] = max_uploaded_brickmaps;
+        let mut brickmap_upload_data = vec![0u32; 4 + 532 * max_uploaded_brickmaps as usize];
+        brickmap_upload_data[0] = max_uploaded_brickmaps;
         let brickmap_staged = Vec::new();
-        let brickmap_unpack_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Brickmap Unpack"),
-            contents: bytemuck::cast_slice(&arr),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
+
+        let mut buffers = gfx::BulkBufferBuilder::new()
+            .with_bytemuck_buffer("Brick World State", &[state_uniform])
+            .with_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
+            .with_bytemuck_buffer("Brickgrid", &brickgrid)
+            .with_bytemuck_buffer("Brickmap Cache", &brickmap_cache)
+            .with_bytemuck_buffer("Shading Table", &shading_table)
+            .with_bytemuck_buffer("Brickgrid Unpack", &brickgrid_upload_data)
+            .with_bytemuck_buffer("Brickmap Unpack", &brickmap_upload_data)
+            .with_usage(
+                wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+            )
+            .with_buffer("Feedback", feedback_data_u8)
+            .build(context);
 
         Self {
             state_uniform,
-            state_buffer,
             brickgrid,
-            brickgrid_buffer,
             brickmap_cache_map,
             brickmap_cache_idx: 0,
-            brickmap_buffer,
-            shading_table_buffer,
             shading_table_allocator,
-            feedback_buffer,
             feedback_result_buffer,
             unpack_max_count: max_uploaded_brickmaps as usize,
             brickgrid_staged,
-            brickgrid_unpack_buffer,
             brickmap_staged,
-            brickmap_unpack_buffer,
+
+            state_buffer: buffers.remove(0),
+            brickgrid_buffer: buffers.remove(0),
+            brickmap_buffer: buffers.remove(0),
+            shading_table_buffer: buffers.remove(0),
+            brickgrid_unpack_buffer: buffers.remove(0),
+            brickmap_unpack_buffer: buffers.remove(0),
+            feedback_buffer: buffers.remove(0),
         }
     }
 
