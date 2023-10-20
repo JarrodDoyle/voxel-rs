@@ -13,7 +13,6 @@ use crate::{
 
 pub struct App {
     title: String,
-    window: winit::window::Window,
     event_loop: EventLoop<()>,
     render_ctx: gfx::Context,
 }
@@ -30,7 +29,7 @@ impl App {
             .unwrap();
 
         let render_ctx = gfx::Context::new(
-            &window,
+            window,
             wgpu::Limits {
                 max_storage_buffer_binding_size: 1 << 30,
                 max_buffer_size: 1 << 30,
@@ -41,7 +40,6 @@ impl App {
 
         Self {
             title: title.to_owned(),
-            window,
             event_loop,
             render_ctx,
         }
@@ -91,14 +89,14 @@ impl App {
                 Event::WindowEvent {
                     ref event,
                     window_id,
-                } if window_id == self.window.id() => match event {
+                } if window_id == self.render_ctx.window.id() => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => {
                         camera_controller.process_events(event);
                     }
                 },
                 Event::MainEventsCleared => {
-                    self.window.request_redraw();
+                    self.render_ctx.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
                     let now = Instant::now();
@@ -111,7 +109,7 @@ impl App {
                     renderer.update_brickmap(&self.render_ctx, &mut world);
 
                     // Simple framerate tracking
-                    self.window.set_title(&format!(
+                    self.render_ctx.window.set_title(&format!(
                         "{}: {} fps",
                         self.title,
                         (1.0 / dt.as_secs_f32()).floor()

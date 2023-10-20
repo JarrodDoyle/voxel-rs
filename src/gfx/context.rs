@@ -1,6 +1,7 @@
 use winit::{dpi::PhysicalSize, window::Window};
 
 pub struct Context {
+    pub window: Window,
     pub instance: wgpu::Instance,
     pub size: PhysicalSize<u32>,
     pub surface: wgpu::Surface,
@@ -11,7 +12,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn new(window: &Window, limits: wgpu::Limits) -> Self {
+    pub async fn new(window: Window, limits: wgpu::Limits) -> Self {
         log::info!("Initialising WGPU context...");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -57,6 +58,7 @@ impl Context {
         surface.configure(&device, &surface_config);
 
         Self {
+            window,
             instance,
             size,
             surface,
