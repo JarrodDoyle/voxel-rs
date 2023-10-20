@@ -1,9 +1,5 @@
 use std::time::Instant;
-use winit::{
-    dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-};
+use winit::{dpi::PhysicalSize, event::Event, event_loop::EventLoop};
 
 use super::camera;
 use crate::{
