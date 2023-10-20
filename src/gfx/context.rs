@@ -99,7 +99,7 @@ impl Context {
                 }
                 WindowEvent::Resized(physical_size) => {
                     self.resize(*physical_size);
-                    true
+                    false
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                     self.resize(**new_inner_size);
