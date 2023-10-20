@@ -144,6 +144,11 @@ impl CameraController {
 
     pub fn process_events(&mut self, event: &WindowEvent) -> bool {
         match event {
+            WindowEvent::Resized(physical_size) => {
+                self.projection
+                    .resize(physical_size.width, physical_size.height);
+                true
+            }
             WindowEvent::KeyboardInput {
                 input:
                     KeyboardInput {
