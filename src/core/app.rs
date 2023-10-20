@@ -45,7 +45,7 @@ impl App {
         }
     }
 
-    pub fn run(self) {
+    pub fn run(mut self) {
         let mut camera_controller = camera::CameraController::new(
             &self.render_ctx,
             camera::Camera::new(
@@ -91,6 +91,12 @@ impl App {
                     window_id,
                 } if window_id == self.render_ctx.window.id() => match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(physical_size) => {
+                        self.render_ctx.resize(*physical_size);
+                    }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        self.render_ctx.resize(**new_inner_size);
+                    }
                     _ => {
                         camera_controller.process_events(event);
                     }
