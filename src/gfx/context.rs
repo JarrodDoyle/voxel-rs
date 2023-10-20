@@ -1,4 +1,9 @@
-use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
+use winit::{
+    dpi::PhysicalSize,
+    event::{Event, WindowEvent},
+    event_loop::ControlFlow,
+    window::Window,
+};
 
 pub struct Context {
     pub window: Window,
@@ -78,14 +83,32 @@ impl Context {
         }
     }
 
-    pub fn handle_window_event(&mut self, event: &WindowEvent) -> bool {
+    pub fn handle_window_event(
+        &mut self,
+        event: &Event<()>,
+        control_flow: &mut ControlFlow,
+    ) -> bool {
         match event {
-            WindowEvent::Resized(physical_size) => {
-                self.resize(*physical_size);
-                true
-            }
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                self.resize(**new_inner_size);
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if *window_id == self.window.id() => match event {
+                WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                    true
+                }
+                WindowEvent::Resized(physical_size) => {
+                    self.resize(*physical_size);
+                    true
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    self.resize(**new_inner_size);
+                    true
+                }
+                _ => false,
+            },
+            Event::MainEventsCleared => {
+                self.window.request_redraw();
                 true
             }
             _ => false,

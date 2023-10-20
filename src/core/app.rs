@@ -84,51 +84,44 @@ impl App {
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
         let mut last_render_time = Instant::now();
-        self.event_loop
-            .run(move |event, _, control_flow| match event {
-                Event::WindowEvent {
-                    ref event,
-                    window_id,
-                } if window_id == self.render_ctx.window.id()
-                    && !self.render_ctx.handle_window_event(event) =>
-                {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        _ => {
-                            camera_controller.process_events(event);
+        self.event_loop.run(move |event, _, control_flow| {
+            if !self.render_ctx.handle_window_event(&event, control_flow) {
+                match event {
+                    Event::WindowEvent {
+                        ref event,
+                        window_id,
+                    } if window_id == self.render_ctx.window.id() => {
+                        camera_controller.process_events(event);
+                    }
+                    Event::RedrawRequested(_) => {
+                        let now = Instant::now();
+                        let dt = now - last_render_time;
+                        last_render_time = now;
+                        camera_controller.update(dt);
+                        camera_controller.update_buffer(&self.render_ctx);
+                        renderer.render(&self.render_ctx);
+                        renderer.update(&dt, &self.render_ctx);
+                        renderer.update_brickmap(&self.render_ctx, &mut world);
+
+                        // Simple framerate tracking
+                        self.render_ctx.window.set_title(&format!(
+                            "{}: {} fps",
+                            self.title,
+                            (1.0 / dt.as_secs_f32()).floor()
+                        ));
+                        cumulative_dt += dt.as_secs_f32();
+                        frames_accumulated += 1.0;
+                        if cumulative_dt >= 1.0 {
+                            let fps = frames_accumulated * 1.0 / cumulative_dt;
+                            let frame_time = cumulative_dt * 1000.0 / frames_accumulated;
+                            log::info!("FPS: {}, Frame Time: {}", fps.floor(), frame_time);
+                            cumulative_dt = 0.0;
+                            frames_accumulated = 0.0;
                         }
                     }
+                    _ => {}
                 }
-                Event::MainEventsCleared => {
-                    self.render_ctx.window.request_redraw();
-                }
-                Event::RedrawRequested(_) => {
-                    let now = Instant::now();
-                    let dt = now - last_render_time;
-                    last_render_time = now;
-                    camera_controller.update(dt);
-                    camera_controller.update_buffer(&self.render_ctx);
-                    renderer.render(&self.render_ctx);
-                    renderer.update(&dt, &self.render_ctx);
-                    renderer.update_brickmap(&self.render_ctx, &mut world);
-
-                    // Simple framerate tracking
-                    self.render_ctx.window.set_title(&format!(
-                        "{}: {} fps",
-                        self.title,
-                        (1.0 / dt.as_secs_f32()).floor()
-                    ));
-                    cumulative_dt += dt.as_secs_f32();
-                    frames_accumulated += 1.0;
-                    if cumulative_dt >= 1.0 {
-                        let fps = frames_accumulated * 1.0 / cumulative_dt;
-                        let frame_time = cumulative_dt * 1000.0 / frames_accumulated;
-                        log::info!("FPS: {}, Frame Time: {}", fps.floor(), frame_time);
-                        cumulative_dt = 0.0;
-                        frames_accumulated = 0.0;
-                    }
-                }
-                _ => {}
-            });
+            }
+        });
     }
 }
