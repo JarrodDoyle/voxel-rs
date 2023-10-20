@@ -89,18 +89,16 @@ impl App {
                 Event::WindowEvent {
                     ref event,
                     window_id,
-                } if window_id == self.render_ctx.window.id() => match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        self.render_ctx.resize(*physical_size);
+                } if window_id == self.render_ctx.window.id()
+                    && !self.render_ctx.handle_window_event(event) =>
+                {
+                    match event {
+                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                        _ => {
+                            camera_controller.process_events(event);
+                        }
                     }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        self.render_ctx.resize(**new_inner_size);
-                    }
-                    _ => {
-                        camera_controller.process_events(event);
-                    }
-                },
+                }
                 Event::MainEventsCleared => {
                     self.render_ctx.window.request_redraw();
                 }

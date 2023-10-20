@@ -1,4 +1,4 @@
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 pub struct Context {
     pub window: Window,
@@ -75,6 +75,20 @@ impl Context {
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
             self.surface.configure(&self.device, &self.surface_config);
+        }
+    }
+
+    pub fn handle_window_event(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::Resized(physical_size) => {
+                self.resize(*physical_size);
+                true
+            }
+            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                self.resize(**new_inner_size);
+                true
+            }
+            _ => false,
         }
     }
 }
