@@ -86,7 +86,7 @@ impl<'window> App<'window> {
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
         let mut last_render_time = Instant::now();
-        self.event_loop.run(|event, elwt| {
+        let _ = self.event_loop.run(|event, elwt| {
             match event {
                 Event::WindowEvent { window_id, event }
                     if window_id == self.render_ctx.window.id() =>

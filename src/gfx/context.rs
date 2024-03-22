@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use winit::{
-    dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoopWindowTarget},
-    window::Window,
+    dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window,
 };
 
 pub struct Context<'window> {
@@ -32,7 +29,7 @@ impl<'window> Context<'window> {
         // - A GPU device to draw to the surface
         // - A draw command queue
         log::info!("Initialising window surface...");
-        let surface = unsafe { instance.create_surface(window.clone()) }.unwrap();
+        let surface = instance.create_surface(window.clone()).unwrap();
 
         log::info!("Requesting GPU adapter...");
         let adapter = instance
