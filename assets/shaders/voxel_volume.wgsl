@@ -296,7 +296,7 @@ fn grid_cast_ray(orig_ray_pos: vec3<f32>, ray_dir: vec3<f32>) -> HitInfo {
 
 @compute @workgroup_size(8, 8, 1)
 fn compute(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let img_coord = vec2<i32>(global_id.xy);
+    let img_coord = global_id.xy;
     let img_dims = textureDimensions(output);
 
     // This discards the extra pixels in cases where the image size isn't perfectly divisible by the kernel.xy

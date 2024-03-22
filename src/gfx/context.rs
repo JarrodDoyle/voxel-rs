@@ -1,27 +1,30 @@
+use std::sync::Arc;
+
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
-    event_loop::ControlFlow,
+    event_loop::{ControlFlow, EventLoopWindowTarget},
     window::Window,
 };
 
-pub struct Context {
-    pub window: Window,
+pub struct Context<'window> {
+    pub window: Arc<Window>,
     pub instance: wgpu::Instance,
     pub size: PhysicalSize<u32>,
-    pub surface: wgpu::Surface,
+    pub surface: wgpu::Surface<'window>,
     pub surface_config: wgpu::SurfaceConfiguration,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
 }
 
-impl Context {
-    pub async fn new(window: Window, limits: wgpu::Limits) -> Self {
+impl<'window> Context<'window> {
+    pub async fn new(window: Arc<Window>, limits: wgpu::Limits) -> Self {
         log::info!("Initialising WGPU context...");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             dx12_shader_compiler: Default::default(),
+            ..Default::default()
         });
 
         // To be able to start drawing we need a few things:
@@ -29,7 +32,7 @@ impl Context {
         // - A GPU device to draw to the surface
         // - A draw command queue
         log::info!("Initialising window surface...");
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let surface = unsafe { instance.create_surface(window.clone()) }.unwrap();
 
         log::info!("Requesting GPU adapter...");
         let adapter = instance
@@ -47,8 +50,8 @@ impl Context {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::empty(),
-                    limits,
+                    required_features: wgpu::Features::empty(),
+                    required_limits: limits,
                 },
                 None,
             )
@@ -74,7 +77,7 @@ impl Context {
         }
     }
 
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+    pub fn resize_surface(&mut self, new_size: PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
             self.surface_config.width = new_size.width;
@@ -85,33 +88,24 @@ impl Context {
 
     pub fn handle_window_event(
         &mut self,
-        event: &Event<()>,
-        control_flow: &mut ControlFlow,
+        event: &WindowEvent,
+        elwt: &EventLoopWindowTarget<()>,
     ) -> bool {
+        let mut handled = true;
         match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if *window_id == self.window.id() => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                    true
-                }
-                WindowEvent::Resized(physical_size) => {
-                    self.resize(*physical_size);
-                    false
-                }
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    self.resize(**new_inner_size);
-                    true
-                }
-                _ => false,
-            },
-            Event::MainEventsCleared => {
-                self.window.request_redraw();
-                true
+            WindowEvent::CloseRequested => {
+                elwt.exit();
             }
-            _ => false,
+            WindowEvent::Resized(physical_size) => {
+                self.resize_surface(*physical_size);
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                self.resize_surface(self.window.inner_size());
+            }
+
+            _ => handled = false,
         }
+
+        handled
     }
 }

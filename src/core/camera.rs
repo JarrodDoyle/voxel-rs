@@ -1,6 +1,9 @@
 use std::time::Duration;
 use wgpu::util::DeviceExt;
-use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::{
+    event::{ElementState, KeyEvent, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
+};
 
 use crate::gfx::Context;
 
@@ -143,17 +146,17 @@ impl CameraController {
     }
 
     pub fn process_events(&mut self, event: &WindowEvent) -> bool {
+        let mut handled = true;
         match event {
             WindowEvent::Resized(physical_size) => {
                 self.projection
                     .resize(physical_size.width, physical_size.height);
-                true
             }
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
+                event:
+                    KeyEvent {
                         state,
-                        virtual_keycode: Some(keycode),
+                        physical_key: PhysicalKey::Code(keycode),
                         ..
                     },
                 ..
@@ -164,51 +167,43 @@ impl CameraController {
                 };
 
                 match keycode {
-                    VirtualKeyCode::W => {
+                    KeyCode::KeyW => {
                         self.move_dirs_pressed.z = val;
-                        true
                     }
-                    VirtualKeyCode::S => {
+                    KeyCode::KeyS => {
                         self.move_dirs_pressed.z = -val;
-                        true
                     }
-                    VirtualKeyCode::A => {
+                    KeyCode::KeyA => {
                         self.move_dirs_pressed.x = -val;
-                        true
                     }
-                    VirtualKeyCode::D => {
+                    KeyCode::KeyD => {
                         self.move_dirs_pressed.x = val;
-                        true
                     }
-                    VirtualKeyCode::Q => {
+                    KeyCode::KeyQ => {
                         self.move_dirs_pressed.y = val;
-                        true
                     }
-                    VirtualKeyCode::E => {
+                    KeyCode::KeyE => {
                         self.move_dirs_pressed.y = -val;
-                        true
                     }
-                    VirtualKeyCode::Up => {
+                    KeyCode::ArrowUp => {
                         self.rot_dirs_pressed.y = val;
-                        true
                     }
-                    VirtualKeyCode::Down => {
+                    KeyCode::ArrowDown => {
                         self.rot_dirs_pressed.y = -val;
-                        true
                     }
-                    VirtualKeyCode::Left => {
+                    KeyCode::ArrowLeft => {
                         self.rot_dirs_pressed.x = -val;
-                        true
                     }
-                    VirtualKeyCode::Right => {
+                    KeyCode::ArrowRight => {
                         self.rot_dirs_pressed.x = val;
-                        true
                     }
-                    _ => false,
+                    _ => handled = false,
                 }
             }
-            _ => false,
+            _ => handled = false,
         }
+
+        handled
     }
 
     pub fn update(&mut self, dt: Duration) {

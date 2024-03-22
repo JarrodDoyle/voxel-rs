@@ -1,5 +1,9 @@
-use std::time::Instant;
-use winit::{dpi::PhysicalSize, event::Event, event_loop::EventLoop};
+use std::{sync::Arc, time::Instant};
+use winit::{
+    dpi::PhysicalSize,
+    event::{Event, WindowEvent},
+    event_loop::EventLoop,
+};
 
 use super::camera;
 use crate::{
@@ -7,22 +11,24 @@ use crate::{
     voxel,
 };
 
-pub struct App {
+pub struct App<'window> {
     title: String,
     event_loop: EventLoop<()>,
-    render_ctx: gfx::Context,
+    render_ctx: gfx::Context<'window>,
 }
 
-impl App {
+impl<'window> App<'window> {
     pub async fn new(width: u32, height: u32, title: &str) -> Self {
         log::info!("Initialising window...");
         let size = PhysicalSize::new(width, height);
-        let event_loop = EventLoop::new();
-        let window = winit::window::WindowBuilder::new()
-            .with_title(title)
-            .with_inner_size(size)
-            .build(&event_loop)
-            .unwrap();
+        let event_loop = EventLoop::new().unwrap();
+        let window = Arc::new(
+            winit::window::WindowBuilder::new()
+                .with_title(title)
+                .with_inner_size(size)
+                .build(&event_loop)
+                .unwrap(),
+        );
 
         let render_ctx = gfx::Context::new(
             window,
@@ -80,16 +86,20 @@ impl App {
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
         let mut last_render_time = Instant::now();
-        self.event_loop.run(move |event, _, control_flow| {
-            if !self.render_ctx.handle_window_event(&event, control_flow) {
-                match event {
-                    Event::WindowEvent {
-                        ref event,
-                        window_id,
-                    } if window_id == self.render_ctx.window.id() => {
-                        camera_controller.process_events(event);
+        self.event_loop.run(|event, elwt| {
+            match event {
+                Event::WindowEvent { window_id, event }
+                    if window_id == self.render_ctx.window.id() =>
+                {
+                    if self.render_ctx.handle_window_event(&event, elwt) {
+                        return;
                     }
-                    Event::RedrawRequested(_) => {
+
+                    if camera_controller.process_events(&event) {
+                        return;
+                    }
+
+                    if let WindowEvent::RedrawRequested = event {
                         let now = Instant::now();
                         let dt = now - last_render_time;
                         last_render_time = now;
@@ -114,10 +124,50 @@ impl App {
                             cumulative_dt = 0.0;
                             frames_accumulated = 0.0;
                         }
+
+                        self.render_ctx.window.request_redraw();
                     }
-                    _ => {}
                 }
+                _ => (),
             }
+
+            // if !self.render_ctx.handle_window_event(&event, control_flow) {
+            //     match event {
+            //         Event::WindowEvent {
+            //             ref event,
+            //             window_id,
+            //         } if window_id == self.render_ctx.window.id() => {
+            //             camera_controller.process_events(event);
+            //         }
+            //         Event::RedrawRequested(_) => {
+            //             let now = Instant::now();
+            //             let dt = now - last_render_time;
+            //             last_render_time = now;
+            //             camera_controller.update(dt);
+            //             camera_controller.update_buffer(&self.render_ctx);
+            //             renderer.render(&self.render_ctx);
+            //             renderer.update(&dt, &self.render_ctx);
+            //             renderer.update_brickmap(&self.render_ctx, &mut world);
+
+            //             // Simple framerate tracking
+            //             self.render_ctx.window.set_title(&format!(
+            //                 "{}: {} fps",
+            //                 self.title,
+            //                 (1.0 / dt.as_secs_f32()).floor()
+            //             ));
+            //             cumulative_dt += dt.as_secs_f32();
+            //             frames_accumulated += 1.0;
+            //             if cumulative_dt >= 1.0 {
+            //                 let fps = frames_accumulated * 1.0 / cumulative_dt;
+            //                 let frame_time = cumulative_dt * 1000.0 / frames_accumulated;
+            //                 log::info!("FPS: {}, Frame Time: {}", fps.floor(), frame_time);
+            //                 cumulative_dt = 0.0;
+            //                 frames_accumulated = 0.0;
+            //             }
+            //         }
+            //         _ => {}
+            //     }
+            // }
         });
     }
 }
