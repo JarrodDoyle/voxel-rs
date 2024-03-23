@@ -6,7 +6,7 @@ mod texture;
 
 pub use self::{
     bind_group::{BindGroupBuilder, BindGroupLayoutBuilder},
-    buffer::BulkBufferBuilder,
+    buffer::{BufferExt, BulkBufferBuilder},
     context::Context,
     renderer::Renderer,
     texture::{Texture, TextureBuilder},

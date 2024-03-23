@@ -1,3 +1,5 @@
+use std::ops::RangeBounds;
+
 use bytemuck::NoUninit;
 use wgpu::util::DeviceExt;
 
@@ -69,5 +71,29 @@ impl<'a> BulkBufferBuilder<'a> {
         }
 
         buffers
+    }
+}
+
+pub trait BufferExt {
+    fn get_mapped_range<S: RangeBounds<wgpu::BufferAddress>, T: bytemuck::Pod>(
+        &self,
+        context: &Context,
+        bounds: S,
+    ) -> Vec<T>;
+}
+
+impl BufferExt for wgpu::Buffer {
+    fn get_mapped_range<S: RangeBounds<wgpu::BufferAddress>, T: bytemuck::Pod>(
+        &self,
+        context: &Context,
+        bounds: S,
+    ) -> Vec<T> {
+        let slice = self.slice(bounds);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        context.device.poll(wgpu::Maintain::Wait);
+        let data: Vec<T> = bytemuck::cast_slice(slice.get_mapped_range().as_ref()).to_vec();
+        self.unmap();
+
+        data
     }
 }
