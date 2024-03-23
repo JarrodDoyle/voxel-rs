@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
 use crate::{
-    gfx, math,
+    gfx::{self, BufferExt},
+    math,
     voxel::world::{Voxel, WorldManager},
 };
 
@@ -178,12 +179,7 @@ impl BrickmapManager {
 
     pub fn process_feedback_buffer(&mut self, context: &gfx::Context, world: &mut WorldManager) {
         // Get request count
-        let mut slice = self.feedback_result_buffer.slice(0..16);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        context.device.poll(wgpu::Maintain::Wait);
-        let mut data: Vec<u32> = bytemuck::cast_slice(slice.get_mapped_range().as_ref()).to_vec();
-        self.feedback_result_buffer.unmap();
-
+        let data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, 0..16);
         let request_count = data[1] as usize;
         if request_count == 0 {
             self.upload_unpack_buffers(context);
@@ -191,12 +187,8 @@ impl BrickmapManager {
         }
 
         // Get the position data
-        let range_end = 16 + 16 * request_count as u64;
-        slice = self.feedback_result_buffer.slice(16..range_end);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        context.device.poll(wgpu::Maintain::Wait);
-        data = bytemuck::cast_slice(slice.get_mapped_range().as_ref()).to_vec();
-        self.feedback_result_buffer.unmap();
+        let range = 16..(16 + 16 * request_count as u64);
+        let data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, range);
 
         // Generate a sphere of voxels
         let grid_dims = self.state_uniform.brickgrid_dims;
