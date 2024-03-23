@@ -6,7 +6,10 @@ use crate::{
     voxel::world::WorldManager,
 };
 
-use super::{brickmap_cache::BrickmapCache, shading_table::ShadingTableAllocator};
+use super::{
+    brickmap_cache::{BrickmapCache, BrickmapCacheEntry},
+    shading_table::ShadingTableAllocator,
+};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -207,7 +210,16 @@ impl BrickmapManager {
         // If there's no voxel colour data post-culling it means the brickmap is
         // empty. We don't need to upload it, just mark the relevant brickgrid entry.
         if albedo_data.is_empty() {
-            self.update_brickgrid_element(grid_idx, 0);
+            if let Some(entry) = self.update_brickgrid_element(grid_idx, 0) {
+                // The brickgrid element had a brickmap entry so we need to unload it's
+                // shading data
+                if let Err(e) = self
+                    .shading_table_allocator
+                    .try_dealloc(entry.shading_table_offset)
+                {
+                    log::warn!("{}", e)
+                }
+            }
             return;
         }
 
@@ -218,20 +230,26 @@ impl BrickmapManager {
             .unwrap() as usize;
 
         if let Some(entry) = self.brickmap_cache.add_entry(grid_idx, shading_idx as u32) {
-            // TODO: Currently this is broken!!
-            // We removed the entry, then when updating the brickgrid we go and remove the NEW entry!!!
-            // Need to think about this
             self.update_brickgrid_element(entry.grid_idx, 1);
         }
 
         // Update the brickgrid index
-        self.update_brickgrid_element(
+        if let Some(old_entry) = self.update_brickgrid_element(
             grid_idx,
             super::util::to_brickgrid_element(
                 self.brickmap_cache.index as u32,
                 BrickgridFlag::Loaded,
             ),
-        );
+        ) {
+            // The brickgrid element had a brickmap entry so we need to unload it's
+            // shading data
+            if let Err(e) = self
+                .shading_table_allocator
+                .try_dealloc(old_entry.shading_table_offset)
+            {
+                log::warn!("{}", e)
+            }
+        }
 
         // Update the brickmap
         let brickmap = Brickmap {
@@ -253,29 +271,17 @@ impl BrickmapManager {
         self.brickmap_staged.push(staged_brickmap);
     }
 
-    fn update_brickgrid_element(&mut self, index: usize, data: u32) {
-        // If we're updating a brickgrid element, we need to make sure to deallocate anything
-        // that's already there. The shading table gets deallocated, and the brickmap cache entry
-        // is marked as None.
+    fn update_brickgrid_element(&mut self, index: usize, data: u32) -> Option<BrickmapCacheEntry> {
+        let mut brickmap_cache_entry = None;
         if (self.brickgrid[index] & 0xF) == 4 {
-            let brickmap_idx = (self.brickgrid[index] >> 8) as usize;
-            match self.brickmap_cache.remove_entry(brickmap_idx) {
-                Some(entry) => {
-                    match self
-                        .shading_table_allocator
-                        .try_dealloc(entry.shading_table_offset)
-                    {
-                        Ok(_) => (),
-                        Err(e) => log::warn!("{}", e),
-                    }
-                }
-                None => log::warn!("Expected brickmap cache entry, found None!"),
-            }
+            let cache_index = (self.brickgrid[index] >> 8) as usize;
+            brickmap_cache_entry = self.brickmap_cache.get_entry(cache_index);
         }
 
         // We're safe to overwrite the CPU brickgrid and mark for GPU upload now
         self.brickgrid[index] = data;
         self.brickgrid_staged.insert(index);
+        brickmap_cache_entry
     }
 
     // TODO: Tidy this up more
