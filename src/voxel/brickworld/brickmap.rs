@@ -179,16 +179,18 @@ impl BrickmapManager {
 
     pub fn process_feedback_buffer(&mut self, context: &gfx::Context, world: &mut WorldManager) {
         // Get request count
-        let data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, 0..16);
+        let mut data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, 0..16);
         let request_count = data[1] as usize;
-        if request_count == 0 {
-            self.upload_unpack_buffers(context);
-            return;
-        }
 
-        // Get the position data
-        let range = 16..(16 + 16 * request_count as u64);
-        let data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, range);
+        // Getting the position data and resetting the request count is costly, so we
+        // only do it if there were actually any requests
+        if request_count > 0 {
+            let range = 16..(16 + 16 * request_count as u64);
+            data = self.feedback_result_buffer.get_mapped_range(context, range);
+            context
+                .queue
+                .write_buffer(&self.feedback_buffer, 4, &[0, 0, 0, 0]);
+        }
 
         // Generate a sphere of voxels
         let grid_dims = self.state_uniform.brickgrid_dims;
@@ -258,10 +260,7 @@ impl BrickmapManager {
             self.brickmap_cache_idx = (self.brickmap_cache_idx + 1) % self.brickmap_cache_map.len();
         }
 
-        // Reset the request count on the gpu buffer
-        let data = &[0, 0, 0, 0];
-        context.queue.write_buffer(&self.feedback_buffer, 4, data);
-
+        // TODO: Why do we call this here rather than doing it outside of here?
         self.upload_unpack_buffers(context);
 
         // TODO: This is inaccurate if we've looped
