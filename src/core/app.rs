@@ -87,7 +87,7 @@ impl<'window> App<'window> {
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
         let mut last_render_time = Instant::now();
-        let _ = self.event_loop.run(|event, elwt| {
+        self.event_loop.run(|event, elwt| {
             match event {
                 Event::WindowEvent { window_id, event }
                     if window_id == self.render_ctx.window.id() =>
@@ -106,8 +106,10 @@ impl<'window> App<'window> {
                         last_render_time = now;
                         camera_controller.update(dt);
                         camera_controller.update_buffer(&self.render_ctx);
-                        renderer.render(&self.render_ctx);
-                        renderer.update(&dt, &self.render_ctx);
+
+                        // !Hack: As far as I know I can't propagate errors out of here. So for now just ignore them
+                        let _ = renderer.render(&self.render_ctx);
+                        let _ = renderer.update(&dt, &self.render_ctx);
                         renderer.update_brickmap(&self.render_ctx, &mut world);
 
                         // Simple framerate tracking
@@ -131,7 +133,7 @@ impl<'window> App<'window> {
                 }
                 _ => (),
             }
-        });
+        })?;
 
         Ok(())
     }
