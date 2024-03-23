@@ -51,9 +51,7 @@ pub struct BrickmapManager {
     state_buffer: wgpu::Buffer,
     brickgrid: Vec<u32>,
     brickgrid_buffer: wgpu::Buffer,
-    brickmap_cache_map: Vec<Option<BrickmapCacheEntry>>,
-    brickmap_cache_idx: usize,
-    brickmap_buffer: wgpu::Buffer,
+    brickmap_cache: BrickmapCache,
     shading_table_buffer: wgpu::Buffer,
     shading_table_allocator: ShadingTableAllocator,
     feedback_buffer: wgpu::Buffer,
@@ -84,8 +82,7 @@ impl BrickmapManager {
         let brickgrid =
             vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
 
-        let brickmap_cache = vec![Brickmap::default(); brickmap_cache_size];
-        let brickmap_cache_map = vec![None; brickmap_cache.capacity()];
+        let brickmap_cache = BrickmapCache::new(context, brickmap_cache_size);
 
         let shading_table_allocator = ShadingTableAllocator::new(4, shading_table_bucket_size);
         let shading_table = vec![0u32; shading_table_allocator.total_elements as usize];
@@ -106,7 +103,6 @@ impl BrickmapManager {
             .with_init_buffer_bm("Brick World State", &[state_uniform])
             .set_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
             .with_init_buffer_bm("Brickgrid", &brickgrid)
-            .with_init_buffer_bm("Brickmap Cache", &brickmap_cache)
             .with_init_buffer_bm("Shading Table", &shading_table)
             .with_init_buffer_bm("Brickgrid Unpack", &brickgrid_upload_data)
             .with_init_buffer_bm("Brickmap Unpack", &brickmap_upload_data)
@@ -123,8 +119,7 @@ impl BrickmapManager {
         Self {
             state_uniform,
             brickgrid,
-            brickmap_cache_map,
-            brickmap_cache_idx: 0,
+            brickmap_cache,
             shading_table_allocator,
             unpack_max_count: max_uploaded_brickmaps as usize,
             brickgrid_staged,
@@ -132,7 +127,6 @@ impl BrickmapManager {
 
             state_buffer: buffers.remove(0),
             brickgrid_buffer: buffers.remove(0),
-            brickmap_buffer: buffers.remove(0),
             shading_table_buffer: buffers.remove(0),
             brickgrid_unpack_buffer: buffers.remove(0),
             brickmap_unpack_buffer: buffers.remove(0),
@@ -150,7 +144,7 @@ impl BrickmapManager {
     }
 
     pub fn get_brickmap_buffer(&self) -> &wgpu::Buffer {
-        &self.brickmap_buffer
+        &self.brickmap_cache.buffer
     }
 
     pub fn get_shading_buffer(&self) -> &wgpu::Buffer {
@@ -198,8 +192,7 @@ impl BrickmapManager {
         // TODO: Why do we call this here rather than doing it outside of here?
         self.upload_unpack_buffers(context);
 
-        // TODO: This is inaccurate if we've looped
-        log::info!("Num loaded brickmaps: {}", self.brickmap_cache_idx);
+        log::info!("Num loaded brickmaps: {}", self.brickmap_cache.num_loaded);
     }
 
     fn handle_request(&mut self, world: &mut WorldManager, data: &[u32]) {
@@ -224,30 +217,24 @@ impl BrickmapManager {
             return;
         }
 
-        // Update the brickgrid index
-        self.update_brickgrid_element(
-            grid_idx,
-            Self::to_brickgrid_element(self.brickmap_cache_idx as u32, BrickgridFlag::Loaded),
-        );
-
-        // If there's already something in the cache spot we want to write to, we
-        // need to unload it.
-        if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
-            let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
-            self.update_brickgrid_element(entry.grid_idx, 1);
-        }
-
         // Update the shading table
         let shading_idx = self
             .shading_table_allocator
             .try_alloc(albedo_data.len() as u32)
             .unwrap() as usize;
 
-        // We're all good to overwrite the cache map entry now :)
-        self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
+        if let Some(entry) = self.brickmap_cache.add_entry(grid_idx, shading_idx as u32) {
+            // TODO: Currently this is broken!!
+            // We removed the entry, then when updating the brickgrid we go and remove the NEW entry!!!
+            // Need to think about this
+            self.update_brickgrid_element(entry.grid_idx, 1);
+        }
+
+        // Update the brickgrid index
+        self.update_brickgrid_element(
             grid_idx,
-            shading_table_offset: shading_idx as u32,
-        });
+            Self::to_brickgrid_element(self.brickmap_cache.index as u32, BrickgridFlag::Loaded),
+        );
 
         // Update the brickmap
         let brickmap = Brickmap {
@@ -261,13 +248,12 @@ impl BrickmapManager {
         shading_elements[..shading_element_count].copy_from_slice(&albedo_data);
 
         let staged_brickmap = BrickmapUnpackElement {
-            cache_idx: self.brickmap_cache_idx as u32,
+            cache_idx: self.brickmap_cache.index as u32,
             brickmap,
             shading_element_count: shading_element_count as u32,
             shading_elements,
         };
         self.brickmap_staged.push(staged_brickmap);
-        self.brickmap_cache_idx = (self.brickmap_cache_idx + 1) % self.brickmap_cache_map.len();
     }
 
     fn update_brickgrid_element(&mut self, index: usize, data: u32) {
@@ -276,8 +262,7 @@ impl BrickmapManager {
         // is marked as None.
         if (self.brickgrid[index] & 0xF) == 4 {
             let brickmap_idx = (self.brickgrid[index] >> 8) as usize;
-            let cache_map_entry = self.brickmap_cache_map[brickmap_idx];
-            match cache_map_entry {
+            match self.brickmap_cache.remove_entry(brickmap_idx) {
                 Some(entry) => {
                     match self
                         .shading_table_allocator
@@ -286,7 +271,6 @@ impl BrickmapManager {
                         Ok(_) => (),
                         Err(e) => log::warn!("{}", e),
                     }
-                    self.brickmap_cache_map[brickmap_idx] = None;
                 }
                 None => log::warn!("Expected brickmap cache entry, found None!"),
             }
@@ -469,5 +453,70 @@ impl BrickmapManager {
         let chunk_pos = (grid_pos.as_dvec3() / chunk_dims).floor();
         let block_pos = grid_pos - (chunk_pos * chunk_dims).as_ivec3();
         (chunk_pos.as_ivec3(), block_pos.as_uvec3())
+    }
+}
+
+#[derive(Debug)]
+struct BrickmapCache {
+    buffer: wgpu::Buffer,
+    cache: Vec<Option<BrickmapCacheEntry>>,
+    index: usize,
+    num_loaded: u32,
+}
+
+impl BrickmapCache {
+    fn new(context: &gfx::Context, size: usize) -> Self {
+        let buffer_data = vec![Brickmap::default(); size];
+        let buffer = gfx::BulkBufferBuilder::new()
+            .set_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
+            .with_init_buffer_bm("Brickmap Cache", &buffer_data)
+            .build(context)
+            .remove(0);
+
+        Self {
+            buffer,
+            cache: vec![None; size],
+            index: 0,
+            num_loaded: 0,
+        }
+    }
+
+    /// Adds a brickmap entry and returns the entry that was overwritten.
+    fn add_entry(
+        &mut self,
+        grid_idx: usize,
+        shading_table_offset: u32,
+    ) -> Option<BrickmapCacheEntry> {
+        // We do this first because we want this to be the index of the most recently added entry
+        // This has the side effect of meaning that on the first loop through the cache the first
+        // entry is empty, but it's fine.
+        self.index = (self.index + 1) % self.cache.len();
+
+        let existing_entry = self.cache[self.index];
+        if existing_entry.is_none() {
+            self.num_loaded += 1;
+        }
+
+        self.cache[self.index] = Some(BrickmapCacheEntry {
+            grid_idx,
+            shading_table_offset,
+        });
+
+        existing_entry
+    }
+
+    /// Remove an entry from the cache and return it
+    fn remove_entry(&mut self, index: usize) -> Option<BrickmapCacheEntry> {
+        let entry = self.cache[index];
+        if entry.is_some() {
+            self.cache[index] = None;
+            self.num_loaded -= 1;
+        }
+
+        entry
+    }
+
+    fn get_entry(&self, index: usize) -> Option<BrickmapCacheEntry> {
+        self.cache[index]
     }
 }
