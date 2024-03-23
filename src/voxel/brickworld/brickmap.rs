@@ -297,24 +297,24 @@ impl BrickmapManager {
         self.brickgrid_staged.insert(index);
     }
 
+    // TODO: Tidy this up more
     fn upload_unpack_buffers(&mut self, context: &gfx::Context) {
         // Brickgrid
         let mut data = Vec::new();
         let mut iter = self.brickgrid_staged.iter();
         let mut to_remove = Vec::new();
         for _ in 0..self.unpack_max_count {
-            let el = iter.next();
-            if el.is_none() {
-                break;
+            match iter.next() {
+                Some(val) => {
+                    to_remove.push(*val);
+                    data.push(*val as u32);
+                    data.push(self.brickgrid[*val]);
+                }
+                None => break,
             }
-
-            let val = el.unwrap();
-            to_remove.push(*val as u32);
-            data.push(*val as u32);
-            data.push(self.brickgrid[*val]);
         }
         for val in &to_remove {
-            self.brickgrid_staged.remove(&(*val as usize));
+            self.brickgrid_staged.remove(val);
         }
 
         if !data.is_empty() {
@@ -328,12 +328,7 @@ impl BrickmapManager {
         context.queue.write_buffer(
             &self.brickgrid_unpack_buffer,
             4,
-            bytemuck::cast_slice(&[data.len()]),
-        );
-        context.queue.write_buffer(
-            &self.brickgrid_unpack_buffer,
-            16,
-            bytemuck::cast_slice(&data),
+            bytemuck::cast_slice(&[&[data.len() as u32, 0, 0], &data[..]].concat()),
         );
 
         // Brickmap
