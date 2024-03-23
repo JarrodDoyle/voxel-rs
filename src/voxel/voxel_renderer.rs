@@ -9,7 +9,7 @@ pub struct VoxelRenderer {
     clear_color: wgpu::Color,
     render_texture: gfx::Texture,
     render_pipeline: wgpu::RenderPipeline,
-    brickmap_manager: super::brickmap::BrickmapManager,
+    brickmap_manager: super::brickworld::BrickmapManager,
     raycast_pipeline: wgpu::ComputePipeline,
     raycast_bind_group: wgpu::BindGroup,
     unpack_pipeline: wgpu::ComputePipeline,
@@ -64,7 +64,7 @@ impl VoxelRenderer {
                 });
 
         log::info!("Creating brickmap manager...");
-        let brickmap_manager = super::brickmap::BrickmapManager::new(
+        let brickmap_manager = super::brickworld::BrickmapManager::new(
             context,
             glam::uvec3(512, 64, 512),
             usize::pow(64, 3),

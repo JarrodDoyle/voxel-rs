@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{gfx, math};
+use crate::{
+    gfx, math,
+    voxel::world::{Voxel, WorldManager},
+};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -171,11 +174,7 @@ impl BrickmapManager {
         self.unpack_max_count
     }
 
-    pub fn process_feedback_buffer(
-        &mut self,
-        context: &gfx::Context,
-        world: &mut super::world::WorldManager,
-    ) {
+    pub fn process_feedback_buffer(&mut self, context: &gfx::Context, world: &mut WorldManager) {
         // Get request count
         let mut slice = self.feedback_result_buffer.slice(0..16);
         slice.map_async(wgpu::MapMode::Read, |_| {});
@@ -365,7 +364,7 @@ impl BrickmapManager {
     }
 
     fn cull_interior_voxels(
-        world: &mut super::world::WorldManager,
+        world: &mut WorldManager,
         grid_pos: glam::IVec3,
     ) -> ([u32; 16], Vec<u32>) {
         // This is the data we want to return
@@ -399,11 +398,11 @@ impl BrickmapManager {
                 for x in 0..8 {
                     // Ignore non-solids
                     let idx = x + y * 8 + z * 8 * 8;
-                    let empty_voxel = super::world::Voxel::Empty;
+                    let empty_voxel = Voxel::Empty;
 
                     match center_block[idx] {
-                        super::world::Voxel::Empty => continue,
-                        super::world::Voxel::Color(r, g, b) => {
+                        Voxel::Empty => continue,
+                        Voxel::Color(r, g, b) => {
                             // A voxel is on the surface if at least one of it's
                             // cardinal neighbours is non-solid.
                             neighbours[0] = if x == 7 {
@@ -470,7 +469,7 @@ impl BrickmapManager {
     }
 
     fn grid_pos_to_world_pos(
-        world: &mut super::world::WorldManager,
+        world: &mut WorldManager,
         grid_pos: glam::IVec3,
     ) -> (glam::IVec3, glam::UVec3) {
         // We deal with dvecs here because we want a negative grid_pos to have floored
