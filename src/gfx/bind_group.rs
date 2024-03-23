@@ -1,5 +1,7 @@
 use std::num::NonZeroU32;
 
+use anyhow::{Context as _, Result};
+
 use super::Context;
 
 #[derive(Debug, Default)]
@@ -123,13 +125,13 @@ impl<'a> BindGroupBuilder<'a> {
     }
 
     #[inline]
-    pub fn build(self, context: &Context) -> wgpu::BindGroup {
-        context
+    pub fn build(self, context: &Context) -> Result<wgpu::BindGroup> {
+        Ok(context
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: self.label,
-                layout: self.layout.unwrap(),
+                layout: self.layout.context("BindGroupBuilder has no layout.")?,
                 entries: self.entries.as_slice(),
-            })
+            }))
     }
 }

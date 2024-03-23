@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::{Context as _, Result};
 use winit::{
     dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoopWindowTarget, window::Window,
 };
@@ -16,7 +17,7 @@ pub struct Context<'window> {
 }
 
 impl<'window> Context<'window> {
-    pub async fn new(window: Arc<Window>, limits: wgpu::Limits) -> Self {
+    pub async fn new(window: Arc<Window>, limits: wgpu::Limits) -> Result<Self> {
         log::info!("Initialising WGPU context...");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -29,7 +30,7 @@ impl<'window> Context<'window> {
         // - A GPU device to draw to the surface
         // - A draw command queue
         log::info!("Initialising window surface...");
-        let surface = instance.create_surface(window.clone()).unwrap();
+        let surface = instance.create_surface(window.clone())?;
 
         log::info!("Requesting GPU adapter...");
         let adapter = instance
@@ -39,7 +40,7 @@ impl<'window> Context<'window> {
                 compatible_surface: Some(&surface),
             })
             .await
-            .unwrap();
+            .context("Failed to find suitable GPU adapter")?;
 
         log::info!("Checking GPU adapter meets requirements");
         log::info!("Requesting GPU device...");
@@ -52,17 +53,16 @@ impl<'window> Context<'window> {
                 },
                 None,
             )
-            .await
-            .unwrap();
+            .await?;
 
         log::info!("Configuring window surface...");
         let size = window.inner_size();
         let surface_config = surface
             .get_default_config(&adapter, size.width, size.height)
-            .unwrap();
+            .context("Surface configuration unsupported by adapter")?;
         surface.configure(&device, &surface_config);
 
-        Self {
+        Ok(Self {
             window,
             instance,
             size,
@@ -71,7 +71,7 @@ impl<'window> Context<'window> {
             adapter,
             device,
             queue,
-        }
+        })
     }
 
     pub fn resize_surface(&mut self, new_size: PhysicalSize<u32>) {

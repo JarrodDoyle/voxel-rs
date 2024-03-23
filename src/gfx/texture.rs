@@ -1,7 +1,8 @@
-// TODO: Support mip-mapping and multi-sampling
+use anyhow::Result;
 
 use super::{BindGroupBuilder, BindGroupLayoutBuilder, Context};
 
+// TODO: Support mip-mapping and multi-sampling
 #[derive(Debug, Clone)]
 pub struct TextureAttributes {
     pub size: wgpu::Extent3d,
@@ -98,7 +99,7 @@ impl TextureBuilder {
     }
 
     #[inline]
-    pub fn build(self, context: &Context) -> Texture {
+    pub fn build(self, context: &Context) -> Result<Texture> {
         Texture::new(context, self.attributes)
     }
 }
@@ -114,7 +115,7 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub fn new(context: &Context, attributes: TextureAttributes) -> Self {
+    pub fn new(context: &Context, attributes: TextureAttributes) -> Result<Self> {
         let texture = context.device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: attributes.size,
@@ -163,16 +164,16 @@ impl Texture {
             .with_layout(&bind_group_layout)
             .with_entry(wgpu::BindingResource::TextureView(&view))
             .with_entry(wgpu::BindingResource::Sampler(&sampler))
-            .build(context);
+            .build(context)?;
 
-        Self {
+        Ok(Self {
             attributes,
             texture,
             view,
             sampler,
             bind_group_layout,
             bind_group,
-        }
+        })
     }
 
     pub fn update(&self, context: &Context, data: &[u8]) {

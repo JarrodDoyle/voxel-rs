@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use anyhow::Result;
+
 use crate::{core, gfx};
 
 #[derive(Debug)]
@@ -15,7 +17,7 @@ pub struct VoxelRenderer {
 }
 
 impl VoxelRenderer {
-    pub fn new(context: &gfx::Context, camera_controller: &core::CameraController) -> Self {
+    pub fn new(context: &gfx::Context, camera_controller: &core::CameraController) -> Result<Self> {
         log::info!("Creating render shader...");
         let shader_descriptor = wgpu::include_wgsl!("../../assets/shaders/shader.wgsl");
         let shader = context.device.create_shader_module(shader_descriptor);
@@ -30,7 +32,7 @@ impl VoxelRenderer {
                     | wgpu::TextureUsages::STORAGE_BINDING,
             )
             .with_shader_visibility(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
-            .build(context);
+            .build(context)?;
 
         log::info!("Creating render pipeline...");
         let render_pipeline =
@@ -100,7 +102,7 @@ impl VoxelRenderer {
                     .get_brickgrid_unpack_buffer()
                     .as_entire_binding(),
             )
-            .build(context);
+            .build(context)?;
         let unpack_pipeline =
             context
                 .device
@@ -147,7 +149,7 @@ impl VoxelRenderer {
             .with_entry(brickmap_manager.get_shading_buffer().as_entire_binding())
             .with_entry(brickmap_manager.get_feedback_buffer().as_entire_binding())
             .with_entry(camera_controller.get_buffer().as_entire_binding())
-            .build(context);
+            .build(context)?;
         let raycast_pipeline =
             context
                 .device
@@ -164,7 +166,7 @@ impl VoxelRenderer {
                     entry_point: "compute",
                 });
 
-        Self {
+        Ok(Self {
             clear_color: wgpu::Color::BLACK,
             render_texture,
             render_pipeline,
@@ -173,13 +175,13 @@ impl VoxelRenderer {
             raycast_bind_group,
             unpack_pipeline,
             unpack_bind_group,
-        }
+        })
     }
 }
 
 impl gfx::Renderer for VoxelRenderer {
-    fn render(&self, context: &gfx::Context) {
-        let frame = context.surface.get_current_texture().unwrap();
+    fn render(&self, context: &gfx::Context) -> Result<()> {
+        let frame = context.surface.get_current_texture()?;
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -231,9 +233,12 @@ impl gfx::Renderer for VoxelRenderer {
 
         context.queue.submit(Some(encoder.finish()));
         frame.present();
+        Ok(())
     }
 
-    fn update(&mut self, _dt: &Duration, _context: &gfx::Context) {}
+    fn update(&mut self, _dt: &Duration, _context: &gfx::Context) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl VoxelRenderer {

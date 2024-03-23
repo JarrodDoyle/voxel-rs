@@ -1,4 +1,6 @@
 use std::{sync::Arc, time::Instant};
+
+use anyhow::Result;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
@@ -18,16 +20,15 @@ pub struct App<'window> {
 }
 
 impl<'window> App<'window> {
-    pub async fn new(width: u32, height: u32, title: &str) -> Self {
+    pub async fn new(width: u32, height: u32, title: &str) -> Result<Self> {
         log::info!("Initialising window...");
         let size = PhysicalSize::new(width, height);
-        let event_loop = EventLoop::new().unwrap();
+        let event_loop = EventLoop::new()?;
         let window = Arc::new(
             winit::window::WindowBuilder::new()
                 .with_title(title)
                 .with_inner_size(size)
-                .build(&event_loop)
-                .unwrap(),
+                .build(&event_loop)?,
         );
 
         let render_ctx = gfx::Context::new(
@@ -38,16 +39,16 @@ impl<'window> App<'window> {
                 ..Default::default()
             },
         )
-        .await;
+        .await?;
 
-        Self {
+        Ok(Self {
             title: title.to_owned(),
             event_loop,
             render_ctx,
-        }
+        })
     }
 
-    pub fn run(mut self) {
+    pub fn run(mut self) -> Result<()> {
         let mut camera_controller = camera::CameraController::new(
             &self.render_ctx,
             camera::Camera::new(
@@ -81,7 +82,7 @@ impl<'window> App<'window> {
             glam::uvec3(32, 32, 32),
         );
 
-        let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller);
+        let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller)?;
 
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
@@ -169,5 +170,7 @@ impl<'window> App<'window> {
             //     }
             // }
         });
+
+        Ok(())
     }
 }

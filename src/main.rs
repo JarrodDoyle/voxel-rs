@@ -3,7 +3,10 @@ mod gfx;
 mod math;
 mod voxel;
 
-fn main() {
+use anyhow::Result;
+
+fn main() -> Result<()> {
     env_logger::init();
-    pollster::block_on(core::App::new(1280, 720, "Epic")).run();
+    pollster::block_on(core::App::new(1280, 720, "Epic"))?.run()?;
+    Ok(())
 }
