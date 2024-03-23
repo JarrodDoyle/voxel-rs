@@ -178,86 +178,21 @@ impl BrickmapManager {
     }
 
     pub fn process_feedback_buffer(&mut self, context: &gfx::Context, world: &mut WorldManager) {
-        // Get request count
-        let mut data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, 0..16);
+        let data: Vec<u32> = self.feedback_result_buffer.get_mapped_range(context, 0..16);
         let request_count = data[1] as usize;
 
-        // Getting the position data and resetting the request count is costly, so we
-        // only do it if there were actually any requests
         if request_count > 0 {
-            let range = 16..(16 + 16 * request_count as u64);
-            data = self.feedback_result_buffer.get_mapped_range(context, range);
+            // Reset the request count for next frame
             context
                 .queue
                 .write_buffer(&self.feedback_buffer, 4, &[0, 0, 0, 0]);
-        }
 
-        // Generate a sphere of voxels
-        let grid_dims = self.state_uniform.brickgrid_dims;
-        for i in 0..request_count {
-            // Extract brickgrid position of the requested brickmap
-            let grid_pos = glam::uvec3(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
-            let grid_idx = math::to_1d_index(
-                grid_pos,
-                glam::uvec3(grid_dims[0], grid_dims[1], grid_dims[2]),
-            );
-
-            // We only want to upload voxels that are on the surface, so we cull anything
-            // that is surrounded by solid voxels
-            let grid_pos = grid_pos.as_ivec3();
-            let (bitmask_data, albedo_data) = Self::cull_interior_voxels(world, grid_pos);
-
-            // If there's no voxel colour data post-culling it means the brickmap is
-            // empty. We don't need to upload it, just mark the relevant brickgrid entry.
-            if albedo_data.is_empty() {
-                self.update_brickgrid_element(grid_idx, 0);
-                continue;
+            let range = 16..(16 + 16 * request_count as u64);
+            let data = self.feedback_result_buffer.get_mapped_range(context, range);
+            for i in 0..request_count {
+                let request_data = &data[(i * 4)..(i * 4 + 3)];
+                self.handle_request(world, request_data);
             }
-
-            // Update the brickgrid index
-            self.update_brickgrid_element(
-                grid_idx,
-                Self::to_brickgrid_element(self.brickmap_cache_idx as u32, BrickgridFlag::Loaded),
-            );
-
-            // If there's already something in the cache spot we want to write to, we
-            // need to unload it.
-            if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
-                let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
-                self.update_brickgrid_element(entry.grid_idx, 1);
-            }
-
-            // Update the shading table
-            let shading_idx = self
-                .shading_table_allocator
-                .try_alloc(albedo_data.len() as u32)
-                .unwrap() as usize;
-
-            // We're all good to overwrite the cache map entry now :)
-            self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
-                grid_idx,
-                shading_table_offset: shading_idx as u32,
-            });
-
-            // Update the brickmap
-            let brickmap = Brickmap {
-                bitmask: bitmask_data,
-                shading_table_offset: shading_idx as u32,
-                lod_color: 0,
-            };
-
-            let shading_element_count = albedo_data.len();
-            let mut shading_elements = [0u32; 512];
-            shading_elements[..shading_element_count].copy_from_slice(&albedo_data);
-
-            let staged_brickmap = BrickmapUnpackElement {
-                cache_idx: self.brickmap_cache_idx as u32,
-                brickmap,
-                shading_element_count: shading_element_count as u32,
-                shading_elements,
-            };
-            self.brickmap_staged.push(staged_brickmap);
-            self.brickmap_cache_idx = (self.brickmap_cache_idx + 1) % self.brickmap_cache_map.len();
         }
 
         // TODO: Why do we call this here rather than doing it outside of here?
@@ -265,6 +200,74 @@ impl BrickmapManager {
 
         // TODO: This is inaccurate if we've looped
         log::info!("Num loaded brickmaps: {}", self.brickmap_cache_idx);
+    }
+
+    fn handle_request(&mut self, world: &mut WorldManager, data: &[u32]) {
+        let grid_dims = self.state_uniform.brickgrid_dims;
+
+        // Extract brickgrid position of the requested brickmap
+        let grid_pos = glam::uvec3(data[0], data[1], data[2]);
+        let grid_idx = math::to_1d_index(
+            grid_pos,
+            glam::uvec3(grid_dims[0], grid_dims[1], grid_dims[2]),
+        );
+
+        // We only want to upload voxels that are on the surface, so we cull anything
+        // that is surrounded by solid voxels
+        let grid_pos = grid_pos.as_ivec3();
+        let (bitmask_data, albedo_data) = Self::cull_interior_voxels(world, grid_pos);
+
+        // If there's no voxel colour data post-culling it means the brickmap is
+        // empty. We don't need to upload it, just mark the relevant brickgrid entry.
+        if albedo_data.is_empty() {
+            self.update_brickgrid_element(grid_idx, 0);
+            return;
+        }
+
+        // Update the brickgrid index
+        self.update_brickgrid_element(
+            grid_idx,
+            Self::to_brickgrid_element(self.brickmap_cache_idx as u32, BrickgridFlag::Loaded),
+        );
+
+        // If there's already something in the cache spot we want to write to, we
+        // need to unload it.
+        if self.brickmap_cache_map[self.brickmap_cache_idx].is_some() {
+            let entry = self.brickmap_cache_map[self.brickmap_cache_idx].unwrap();
+            self.update_brickgrid_element(entry.grid_idx, 1);
+        }
+
+        // Update the shading table
+        let shading_idx = self
+            .shading_table_allocator
+            .try_alloc(albedo_data.len() as u32)
+            .unwrap() as usize;
+
+        // We're all good to overwrite the cache map entry now :)
+        self.brickmap_cache_map[self.brickmap_cache_idx] = Some(BrickmapCacheEntry {
+            grid_idx,
+            shading_table_offset: shading_idx as u32,
+        });
+
+        // Update the brickmap
+        let brickmap = Brickmap {
+            bitmask: bitmask_data,
+            shading_table_offset: shading_idx as u32,
+            lod_color: 0,
+        };
+
+        let shading_element_count = albedo_data.len();
+        let mut shading_elements = [0u32; 512];
+        shading_elements[..shading_element_count].copy_from_slice(&albedo_data);
+
+        let staged_brickmap = BrickmapUnpackElement {
+            cache_idx: self.brickmap_cache_idx as u32,
+            brickmap,
+            shading_element_count: shading_element_count as u32,
+            shading_elements,
+        };
+        self.brickmap_staged.push(staged_brickmap);
+        self.brickmap_cache_idx = (self.brickmap_cache_idx + 1) % self.brickmap_cache_map.len();
     }
 
     fn update_brickgrid_element(&mut self, index: usize, data: u32) {
