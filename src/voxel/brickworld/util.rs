@@ -1,7 +1,5 @@
 use crate::voxel::world::{Voxel, WorldManager};
 
-use super::brickgrid::BrickgridFlag;
-
 pub fn cull_interior_voxels(
     world: &mut WorldManager,
     grid_pos: glam::IVec3,
@@ -101,10 +99,6 @@ pub fn cull_interior_voxels(
     }
 
     (bitmask_data, albedo_data)
-}
-
-pub fn to_brickgrid_element(brickmap_cache_idx: u32, flags: BrickgridFlag) -> u32 {
-    (brickmap_cache_idx << 8) + flags as u32
 }
 
 pub fn grid_pos_to_world_pos(

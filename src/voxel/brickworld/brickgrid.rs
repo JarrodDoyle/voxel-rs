@@ -1,9 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{
-    gfx::{BulkBufferBuilder, Context},
-    math,
-};
+use crate::gfx::{BulkBufferBuilder, Context};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BrickgridFlag {
@@ -78,9 +75,15 @@ impl Brickgrid {
         }
     }
 
-    /// Panics if position maps to out of range index
-    // pub fn set(&mut self, pos: glam::UVec3, value: BrickgridElement) -> BrickgridElement {
-    //      let index = math::to_1d_index(pos, self.dimensions);
+    pub fn get_buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    pub fn get_upload_buffer(&self) -> &wgpu::Buffer {
+        &self.upload_buffer
+    }
+
+    /// Panics if index out of range
     pub fn set(&mut self, index: usize, value: BrickgridElement) -> BrickgridElement {
         let current = self.data[index];
         self.data[index] = value;
@@ -88,9 +91,7 @@ impl Brickgrid {
         current
     }
 
-    /// Panics if position maps to out of range index
-    // pub fn get(&mut self, pos: glam::UVec3) -> BrickgridElement {
-    //     let index = math::to_1d_index(pos, self.dimensions);
+    /// Panics if index out of range
     pub fn get(&mut self, index: usize) -> BrickgridElement {
         self.data[index]
     }
@@ -127,13 +128,5 @@ impl Brickgrid {
                 self.staged.len()
             );
         }
-    }
-
-    pub fn get_buffer(&self) -> &wgpu::Buffer {
-        &self.buffer
-    }
-
-    pub fn get_upload_buffer(&self) -> &wgpu::Buffer {
-        &self.upload_buffer
     }
 }
