@@ -1,6 +1,12 @@
 use crate::gfx::{BulkBufferBuilder, Context};
 
-use super::brickmap::Brickmap;
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Brickmap {
+    pub bitmask: [u32; 16],
+    pub shading_table_offset: u32,
+    pub lod_color: u32,
+}
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct BrickmapCacheEntry {

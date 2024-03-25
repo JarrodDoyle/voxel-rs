@@ -12,14 +12,6 @@ use super::{
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Brickmap {
-    pub bitmask: [u32; 16],
-    pub shading_table_offset: u32,
-    pub lod_color: u32,
-}
-
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct WorldState {
     brickgrid_dims: [u32; 3],
     _pad: u32,
