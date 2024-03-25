@@ -25,15 +25,6 @@ struct WorldState {
     _pad: u32,
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct BrickmapUnpackElement {
-    cache_idx: u32,
-    brickmap: Brickmap,
-    shading_element_count: u32,
-    shading_elements: [u32; 512],
-}
-
 #[derive(Debug)]
 pub struct BrickmapManager {
     state_uniform: WorldState,
@@ -45,8 +36,6 @@ pub struct BrickmapManager {
     feedback_buffer: wgpu::Buffer,
     feedback_result_buffer: wgpu::Buffer,
     unpack_max_count: usize,
-    brickmap_staged: Vec<BrickmapUnpackElement>,
-    brickmap_unpack_buffer: wgpu::Buffer,
 }
 
 // TODO:
@@ -66,8 +55,11 @@ impl BrickmapManager {
         };
 
         let brickgrid = Brickgrid::new(context, brickgrid_dims, max_uploaded_brickmaps as usize);
-
-        let brickmap_cache = BrickmapCache::new(context, brickmap_cache_size);
+        let brickmap_cache = BrickmapCache::new(
+            context,
+            brickmap_cache_size,
+            max_uploaded_brickmaps as usize,
+        );
 
         let shading_table_allocator = ShadingTableAllocator::new(4, shading_table_bucket_size);
         let shading_table = vec![0u32; shading_table_allocator.total_elements as usize];
@@ -78,13 +70,11 @@ impl BrickmapManager {
 
         let mut brickmap_upload_data = vec![0u32; 4 + 532 * max_uploaded_brickmaps as usize];
         brickmap_upload_data[0] = max_uploaded_brickmaps;
-        let brickmap_staged = Vec::new();
 
         let mut buffers = gfx::BulkBufferBuilder::new()
             .with_init_buffer_bm("Brick World State", &[state_uniform])
             .set_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
             .with_init_buffer_bm("Shading Table", &shading_table)
-            .with_init_buffer_bm("Brickmap Unpack", &brickmap_upload_data)
             .set_usage(
                 wgpu::BufferUsages::STORAGE
                     | wgpu::BufferUsages::COPY_DST
@@ -101,11 +91,9 @@ impl BrickmapManager {
             brickmap_cache,
             shading_table_allocator,
             unpack_max_count: max_uploaded_brickmaps as usize,
-            brickmap_staged,
 
             state_buffer: buffers.remove(0),
             shading_table_buffer: buffers.remove(0),
-            brickmap_unpack_buffer: buffers.remove(0),
             feedback_buffer: buffers.remove(0),
             feedback_result_buffer: buffers.remove(0),
         }
@@ -136,7 +124,7 @@ impl BrickmapManager {
     }
 
     pub fn get_brickmap_unpack_buffer(&self) -> &wgpu::Buffer {
-        &self.brickmap_unpack_buffer
+        self.brickmap_cache.get_upload_buffer()
     }
 
     pub fn get_brickgrid_unpack_buffer(&self) -> &wgpu::Buffer {
@@ -209,7 +197,10 @@ impl BrickmapManager {
             .try_alloc(albedo_data.len() as u32)
             .unwrap() as usize;
 
-        if let Some(entry) = self.brickmap_cache.add_entry(grid_idx, shading_idx as u32) {
+        if let Some(entry) =
+            self.brickmap_cache
+                .add_entry(grid_idx, shading_idx as u32, bitmask_data, albedo_data)
+        {
             self.update_brickgrid_element(entry.grid_idx, 1);
         }
 
@@ -231,25 +222,6 @@ impl BrickmapManager {
                 log::warn!("{}", e)
             }
         }
-
-        // Update the brickmap
-        let brickmap = Brickmap {
-            bitmask: bitmask_data,
-            shading_table_offset: shading_idx as u32,
-            lod_color: 0,
-        };
-
-        let shading_element_count = albedo_data.len();
-        let mut shading_elements = [0u32; 512];
-        shading_elements[..shading_element_count].copy_from_slice(&albedo_data);
-
-        let staged_brickmap = BrickmapUnpackElement {
-            cache_idx: self.brickmap_cache.index as u32,
-            brickmap,
-            shading_element_count: shading_element_count as u32,
-            shading_elements,
-        };
-        self.brickmap_staged.push(staged_brickmap);
     }
 
     fn update_brickgrid_element(&mut self, index: usize, data: u32) -> Option<BrickmapCacheEntry> {
@@ -265,30 +237,8 @@ impl BrickmapManager {
         brickmap_cache_entry
     }
 
-    // TODO: Tidy this up more
     fn upload_unpack_buffers(&mut self, context: &gfx::Context) {
         self.brickgrid.upload(context);
-
-        // Brickmap
-        let end = self.unpack_max_count.min(self.brickmap_staged.len());
-        let iter = self.brickmap_staged.drain(0..end);
-        let data = iter.as_slice();
-        context.queue.write_buffer(
-            &self.brickmap_unpack_buffer,
-            4,
-            bytemuck::cast_slice(&[end]),
-        );
-        context
-            .queue
-            .write_buffer(&self.brickmap_unpack_buffer, 16, bytemuck::cast_slice(data));
-        drop(iter);
-
-        if end > 0 {
-            log::info!(
-                "Uploading {} brickmap entries. ({} remaining)",
-                end,
-                self.brickmap_staged.len()
-            );
-        }
+        self.brickmap_cache.upload(context);
     }
 }
