@@ -41,7 +41,7 @@ impl BrickmapCache {
 
         // TODO: change type of upload data. Will need some messyness with bytemucking probably
         // but should lead to clearer data definitions
-        let mut upload_data = vec![0u32; 4 + 532 * max_upload_count as usize];
+        let mut upload_data = vec![0u32; 4 + 532 * max_upload_count];
         upload_data[0] = max_upload_count as u32;
 
         let mut buffers = BulkBufferBuilder::new()
