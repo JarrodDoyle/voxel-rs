@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{
     gfx::{self, BufferExt},
     math,
@@ -7,6 +5,7 @@ use crate::{
 };
 
 use super::{
+    brickgrid::{Brickgrid, BrickgridElement, BrickgridFlag},
     brickmap_cache::{BrickmapCache, BrickmapCacheEntry},
     shading_table::ShadingTableAllocator,
 };
@@ -35,27 +34,17 @@ struct BrickmapUnpackElement {
     shading_elements: [u32; 512],
 }
 
-pub enum BrickgridFlag {
-    _Empty = 0,
-    _Unloaded = 1,
-    _Loading = 2,
-    Loaded = 4,
-}
-
 #[derive(Debug)]
 pub struct BrickmapManager {
     state_uniform: WorldState,
     state_buffer: wgpu::Buffer,
-    brickgrid: Vec<u32>,
-    brickgrid_buffer: wgpu::Buffer,
+    brickgrid: Brickgrid,
     brickmap_cache: BrickmapCache,
     shading_table_buffer: wgpu::Buffer,
     shading_table_allocator: ShadingTableAllocator,
     feedback_buffer: wgpu::Buffer,
     feedback_result_buffer: wgpu::Buffer,
     unpack_max_count: usize,
-    brickgrid_staged: HashSet<usize>,
-    brickgrid_unpack_buffer: wgpu::Buffer,
     brickmap_staged: Vec<BrickmapUnpackElement>,
     brickmap_unpack_buffer: wgpu::Buffer,
 }
@@ -76,8 +65,7 @@ impl BrickmapManager {
             ..Default::default()
         };
 
-        let brickgrid =
-            vec![1u32; (brickgrid_dims.x * brickgrid_dims.y * brickgrid_dims.z) as usize];
+        let brickgrid = Brickgrid::new(context, brickgrid_dims, max_uploaded_brickmaps as usize);
 
         let brickmap_cache = BrickmapCache::new(context, brickmap_cache_size);
 
@@ -88,10 +76,6 @@ impl BrickmapManager {
         feedback_data[0] = max_requested_brickmaps;
         let feedback_data_u8 = bytemuck::cast_slice(&feedback_data);
 
-        let mut brickgrid_upload_data = vec![0u32; 4 + 4 * max_uploaded_brickmaps as usize];
-        brickgrid_upload_data[0] = max_uploaded_brickmaps;
-        let brickgrid_staged = HashSet::new();
-
         let mut brickmap_upload_data = vec![0u32; 4 + 532 * max_uploaded_brickmaps as usize];
         brickmap_upload_data[0] = max_uploaded_brickmaps;
         let brickmap_staged = Vec::new();
@@ -99,9 +83,7 @@ impl BrickmapManager {
         let mut buffers = gfx::BulkBufferBuilder::new()
             .with_init_buffer_bm("Brick World State", &[state_uniform])
             .set_usage(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST)
-            .with_init_buffer_bm("Brickgrid", &brickgrid)
             .with_init_buffer_bm("Shading Table", &shading_table)
-            .with_init_buffer_bm("Brickgrid Unpack", &brickgrid_upload_data)
             .with_init_buffer_bm("Brickmap Unpack", &brickmap_upload_data)
             .set_usage(
                 wgpu::BufferUsages::STORAGE
@@ -119,13 +101,10 @@ impl BrickmapManager {
             brickmap_cache,
             shading_table_allocator,
             unpack_max_count: max_uploaded_brickmaps as usize,
-            brickgrid_staged,
             brickmap_staged,
 
             state_buffer: buffers.remove(0),
-            brickgrid_buffer: buffers.remove(0),
             shading_table_buffer: buffers.remove(0),
-            brickgrid_unpack_buffer: buffers.remove(0),
             brickmap_unpack_buffer: buffers.remove(0),
             feedback_buffer: buffers.remove(0),
             feedback_result_buffer: buffers.remove(0),
@@ -133,7 +112,7 @@ impl BrickmapManager {
     }
 
     pub fn get_brickgrid_buffer(&self) -> &wgpu::Buffer {
-        &self.brickgrid_buffer
+        self.brickgrid.get_buffer()
     }
 
     pub fn get_worldstate_buffer(&self) -> &wgpu::Buffer {
@@ -161,7 +140,7 @@ impl BrickmapManager {
     }
 
     pub fn get_brickgrid_unpack_buffer(&self) -> &wgpu::Buffer {
-        &self.brickgrid_unpack_buffer
+        self.brickgrid.get_upload_buffer()
     }
 
     pub fn get_unpack_max_count(&self) -> usize {
@@ -211,6 +190,7 @@ impl BrickmapManager {
         // empty. We don't need to upload it, just mark the relevant brickgrid entry.
         if albedo_data.is_empty() {
             if let Some(entry) = self.update_brickgrid_element(grid_idx, 0) {
+                // TODO: We need to actually remove the cache entry lmao
                 // The brickgrid element had a brickmap entry so we need to unload it's
                 // shading data
                 if let Err(e) = self
@@ -241,6 +221,7 @@ impl BrickmapManager {
                 BrickgridFlag::Loaded,
             ),
         ) {
+            // TODO: We need to actually remove the cache entry lmao
             // The brickgrid element had a brickmap entry so we need to unload it's
             // shading data
             if let Err(e) = self
@@ -273,50 +254,20 @@ impl BrickmapManager {
 
     fn update_brickgrid_element(&mut self, index: usize, data: u32) -> Option<BrickmapCacheEntry> {
         let mut brickmap_cache_entry = None;
-        if (self.brickgrid[index] & 0xF) == 4 {
-            let cache_index = (self.brickgrid[index] >> 8) as usize;
+        let current = self.brickgrid.get(index);
+        if current.get_flag() == BrickgridFlag::Loaded {
+            let cache_index = current.get_pointer();
             brickmap_cache_entry = self.brickmap_cache.get_entry(cache_index);
         }
 
         // We're safe to overwrite the CPU brickgrid and mark for GPU upload now
-        self.brickgrid[index] = data;
-        self.brickgrid_staged.insert(index);
+        self.brickgrid.set(index, BrickgridElement(data));
         brickmap_cache_entry
     }
 
     // TODO: Tidy this up more
     fn upload_unpack_buffers(&mut self, context: &gfx::Context) {
-        // Brickgrid
-        let mut data = Vec::new();
-        let mut iter = self.brickgrid_staged.iter();
-        let mut to_remove = Vec::new();
-        for _ in 0..self.unpack_max_count {
-            match iter.next() {
-                Some(val) => {
-                    to_remove.push(*val);
-                    data.push(*val as u32);
-                    data.push(self.brickgrid[*val]);
-                }
-                None => break,
-            }
-        }
-        for val in &to_remove {
-            self.brickgrid_staged.remove(val);
-        }
-
-        if !data.is_empty() {
-            log::info!(
-                "Uploading {} brickgrid entries. ({} remaining)",
-                to_remove.len(),
-                self.brickgrid_staged.len()
-            );
-        }
-
-        context.queue.write_buffer(
-            &self.brickgrid_unpack_buffer,
-            4,
-            bytemuck::cast_slice(&[&[data.len() as u32, 0, 0], &data[..]].concat()),
-        );
+        self.brickgrid.upload(context);
 
         // Brickmap
         let end = self.unpack_max_count.min(self.brickmap_staged.len());

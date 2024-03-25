@@ -1,6 +1,6 @@
 use crate::voxel::world::{Voxel, WorldManager};
 
-use super::brickmap::BrickgridFlag;
+use super::brickgrid::BrickgridFlag;
 
 pub fn cull_interior_voxels(
     world: &mut WorldManager,

@@ -78,6 +78,7 @@ pub fn tri_lerp_block(p: &[f32], dims: &[u32], vals: &mut [f32]) {
 }
 
 /// Maps a 3d index to a 1d index
+// TODO: Handle out of range!!
 pub fn to_1d_index(p: glam::UVec3, dim: glam::UVec3) -> usize {
     (p.x + p.y * dim.x + p.z * dim.x * dim.y) as usize
 }

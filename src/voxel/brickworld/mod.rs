@@ -1,3 +1,4 @@
+mod brickgrid;
 mod brickmap;
 mod brickmap_cache;
 mod shading_table;
