@@ -16,8 +16,7 @@ pub struct BrickmapCacheEntry {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-// TODO: Rename struct
-struct BrickmapUnpackElement {
+struct BrickmapUploadElement {
     cache_idx: u32, // TODO: Change to usize?
     brickmap: Brickmap,
     shading_element_count: u32,
@@ -29,7 +28,7 @@ pub struct BrickmapCache {
     cache: Vec<Option<BrickmapCacheEntry>>,
     pub index: usize,
     pub num_loaded: u32,
-    staged: Vec<BrickmapUnpackElement>,
+    staged: Vec<BrickmapUploadElement>,
     max_upload_count: usize,
     buffer: wgpu::Buffer,
     upload_buffer: wgpu::Buffer,
@@ -103,7 +102,7 @@ impl BrickmapCache {
         let mut shading_elements = [0u32; 512];
         shading_elements[..shading_element_count].copy_from_slice(&albedo_data);
 
-        let staged_brickmap = BrickmapUnpackElement {
+        let staged_brickmap = BrickmapUploadElement {
             cache_idx: self.index as u32,
             brickmap,
             shading_element_count: shading_element_count as u32,
