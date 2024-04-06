@@ -1,2 +1,2 @@
-pub mod brickworld;
+pub mod brickmap;
 pub mod world;
