@@ -185,11 +185,6 @@ impl BrickmapRenderer {
             unpack_bind_group,
         })
     }
-
-    pub fn update_brickmap(&mut self, context: &gfx::Context, world: &mut WorldManager) {
-        self.brickmap_manager
-            .process_feedback_buffer(context, world);
-    }
 }
 
 impl VoxelRenderer for BrickmapRenderer {
@@ -249,7 +244,14 @@ impl VoxelRenderer for BrickmapRenderer {
         Ok(())
     }
 
-    fn update(&mut self, _dt: &Duration, _context: &gfx::Context) -> Result<()> {
+    fn update(
+        &mut self,
+        _dt: &Duration,
+        context: &gfx::Context,
+        world: &mut WorldManager,
+    ) -> Result<()> {
+        self.brickmap_manager
+            .process_feedback_buffer(context, world);
         Ok(())
     }
 }

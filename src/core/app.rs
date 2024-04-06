@@ -109,8 +109,7 @@ impl<'window> App<'window> {
 
                         // !Hack: As far as I know I can't propagate errors out of here. So for now just ignore them
                         let _ = renderer.render(&self.render_ctx);
-                        let _ = renderer.update(&dt, &self.render_ctx);
-                        renderer.update_brickmap(&self.render_ctx, &mut world);
+                        let _ = renderer.update(&dt, &self.render_ctx, &mut world);
 
                         // Simple framerate tracking
                         self.render_ctx.window.set_title(&format!(
