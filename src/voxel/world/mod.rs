@@ -1,7 +1,10 @@
 mod chunk;
 mod manager;
 
-pub use {chunk::Chunk, manager::*};
+pub use {
+    chunk::{Chunk, ChunkSettings},
+    manager::*,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Voxel {

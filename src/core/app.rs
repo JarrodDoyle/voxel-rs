@@ -79,7 +79,10 @@ impl<'window> App<'window> {
                 gain: 0.5,
                 lacunarity: 2.0,
             },
-            glam::uvec3(32, 32, 32),
+            voxel::world::ChunkSettings {
+                dimensions: glam::uvec3(32, 32, 32),
+                block_dimensions: glam::uvec3(8, 8, 8),
+            },
         );
 
         let mut renderer = BrickmapRenderer::new(&self.render_ctx, &camera_controller)?;

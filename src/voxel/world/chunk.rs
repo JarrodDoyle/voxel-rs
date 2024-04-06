@@ -1,38 +1,74 @@
 use crate::math;
 
-use super::Voxel;
+use super::{GenerationSettings, Voxel};
+
+#[derive(Debug, Clone, Copy)]
+pub struct ChunkSettings {
+    pub dimensions: glam::UVec3,
+    pub block_dimensions: glam::UVec3,
+}
 
 #[derive(Debug)]
 pub struct Chunk {
-    pos: glam::IVec3,
+    settings: ChunkSettings,
     noise: Vec<f32>,
     blocks: Vec<Vec<Voxel>>,
 }
 
 impl Chunk {
-    pub fn new(pos: glam::IVec3, noise: Vec<f32>, blocks: Vec<Vec<Voxel>>) -> Self {
-        Self { pos, noise, blocks }
+    pub fn new(
+        generation_settings: &GenerationSettings,
+        chunk_settings: ChunkSettings,
+        pos: glam::IVec3,
+    ) -> Self {
+        let dims = chunk_settings.dimensions;
+
+        // We use dimensions of `chunk_dims + 1` because the corners on the last chunk
+        // block of each axis step outside of our 0..N bounds, sharing a value with the
+        // neighbouring chunk
+        let noise = simdnoise::NoiseBuilder::fbm_3d_offset(
+            pos.x as f32 * dims.x as f32,
+            dims.x as usize + 1,
+            pos.y as f32 * dims.y as f32,
+            dims.y as usize + 1,
+            pos.z as f32 * dims.z as f32,
+            dims.z as usize + 1,
+        )
+        .with_seed(generation_settings.seed)
+        .with_freq(generation_settings.frequency)
+        .with_octaves(generation_settings.octaves)
+        .with_gain(generation_settings.gain)
+        .with_lacunarity(generation_settings.lacunarity)
+        .generate()
+        .0;
+
+        let num_blocks = dims.x * dims.y * dims.z;
+        let blocks = vec![vec![]; num_blocks as usize];
+
+        Self {
+            settings: chunk_settings,
+            noise,
+            blocks,
+        }
     }
 
-    pub fn get_block(&mut self, block_pos: glam::UVec3, chunk_dims: glam::UVec3) -> Vec<Voxel> {
-        assert_eq!(
-            self.blocks.len(),
-            (chunk_dims.x * chunk_dims.y * chunk_dims.z) as usize
-        );
+    pub fn get_block(&mut self, pos: glam::UVec3) -> Vec<Voxel> {
+        let dims = self.settings.dimensions;
+        assert!(pos.x < dims.x && pos.y < dims.y && pos.z < dims.z);
 
-        let block_idx = math::to_1d_index(block_pos, chunk_dims);
+        let block_idx = math::to_1d_index(pos, dims);
         let mut block = &self.blocks[block_idx];
         if block.is_empty() {
-            self.gen_block(block_pos, block_idx, chunk_dims);
+            self.gen_block(pos, block_idx);
             block = &self.blocks[block_idx]
         }
 
         block.to_owned()
     }
 
-    pub fn gen_block(&mut self, block_pos: glam::UVec3, block_idx: usize, chunk_dims: glam::UVec3) {
+    pub fn gen_block(&mut self, block_pos: glam::UVec3, block_idx: usize) {
         let block = &mut self.blocks[block_idx];
-        let noise_dims = chunk_dims + glam::uvec3(1, 1, 1);
+        let noise_dims = self.settings.dimensions + glam::uvec3(1, 1, 1);
 
         // Extract relevant noise values from the chunk
         let mut noise_vals = Vec::new();
