@@ -10,7 +10,7 @@ use winit::{
 use super::camera;
 use crate::{
     gfx::{self, Renderer},
-    voxel,
+    voxel::{self, brickworld::BrickmapRenderer},
 };
 
 pub struct App<'window> {
@@ -82,7 +82,7 @@ impl<'window> App<'window> {
             glam::uvec3(32, 32, 32),
         );
 
-        let mut renderer = voxel::VoxelRenderer::new(&self.render_ctx, &camera_controller)?;
+        let mut renderer = BrickmapRenderer::new(&self.render_ctx, &camera_controller)?;
 
         let mut cumulative_dt = 0.0;
         let mut frames_accumulated = 0.0;
