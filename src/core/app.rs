@@ -9,8 +9,8 @@ use winit::{
 
 use super::camera;
 use crate::{
-    gfx::{self, Renderer},
-    voxel::{self, brickmap::BrickmapRenderer},
+    gfx,
+    voxel::{self, brickmap::BrickmapRenderer, VoxelRenderer},
 };
 
 pub struct App<'window> {

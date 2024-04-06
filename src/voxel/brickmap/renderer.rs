@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use crate::{core, gfx, voxel::world::WorldManager};
+use crate::{
+    core, gfx,
+    voxel::{renderer::VoxelRenderer, world::WorldManager},
+};
 
 use super::BrickmapManager;
 
@@ -189,7 +192,7 @@ impl BrickmapRenderer {
     }
 }
 
-impl gfx::Renderer for BrickmapRenderer {
+impl VoxelRenderer for BrickmapRenderer {
     fn render(&self, context: &gfx::Context) -> Result<()> {
         let frame = context.surface.get_current_texture()?;
         let view = frame
