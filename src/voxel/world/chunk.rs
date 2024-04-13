@@ -75,9 +75,9 @@ impl Chunk {
         assert!(end.x <= dims.x && end.y <= dims.y && end.z <= dims.z);
 
         // Check that all the blocks needed are generated and generated them if needed
-        // TODO: Don't hardcode this division!!
-        let start_block = start / 8;
-        let end_block = end / 8;
+        let block_dims = self.settings.block_dimensions;
+        let start_block = start / block_dims;
+        let end_block = end / block_dims;
         for z in start_block.z..(end_block.z) {
             for y in (start_block.y)..(end_block.y) {
                 for x in (start_block.x)..(end_block.x) {
@@ -168,10 +168,15 @@ impl Chunk {
         // will be negative too. The chunk voxels are initialised as empty already
         // so we only need to modify them if we have at least one positive corner
         if block_sign != -8.0 {
-            let mut vals = [0.0f32; 512];
-            math::tri_lerp_block(&noise_vals, &[8, 8, 8], &mut vals);
-
             let block_dims = self.settings.block_dimensions;
+
+            let mut vals = [0.0f32; 512];
+            math::tri_lerp_block(
+                &noise_vals,
+                &[block_dims.x, block_dims.y, block_dims.z],
+                &mut vals,
+            );
+
             let start = block_pos * block_dims;
             let end = start + block_dims;
             let mut block = self.blocks.slice_mut(s![
