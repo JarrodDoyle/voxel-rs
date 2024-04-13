@@ -31,7 +31,10 @@ impl WorldManager {
         }
 
         let chunk = self.chunks.get_mut(&chunk_pos).unwrap();
-        chunk.get_block(local_pos)
+        let block_dims = self.chunk_settings.block_dimensions;
+        chunk.get_region(local_pos * block_dims, block_dims)
+
+        // chunk.get_block(local_pos)
     }
 
     fn gen_chunk(&mut self, pos: glam::IVec3) -> Chunk {

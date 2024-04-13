@@ -52,6 +52,46 @@ impl Chunk {
         }
     }
 
+    pub fn get_region(
+        &mut self,
+        region_start: glam::UVec3,
+        region_dims: glam::UVec3,
+    ) -> Vec<Voxel> {
+        let mut voxels = vec![];
+
+        let start = region_start;
+        let end = region_start + region_dims;
+        let dims = self.settings.dimensions * self.settings.block_dimensions;
+        assert!(end.x <= dims.x && end.y <= dims.y && end.z <= dims.z);
+
+        for z in (start.z)..(end.z) {
+            for y in (start.y)..(end.y) {
+                for x in (start.x)..(end.x) {
+                    voxels.push(self.get_voxel(glam::uvec3(x, y, z)));
+                }
+            }
+        }
+
+        voxels
+    }
+
+    pub fn get_voxel(&mut self, pos: glam::UVec3) -> Voxel {
+        let dims = self.settings.dimensions * self.settings.block_dimensions;
+        debug_assert!(pos.x < dims.x && pos.y < dims.y && pos.z < dims.z);
+
+        let block_pos = pos / self.settings.block_dimensions;
+        let block_idx = math::to_1d_index(block_pos, self.settings.dimensions);
+        let mut block = &self.blocks[block_idx];
+        if block.is_empty() {
+            self.gen_block(block_pos, block_idx);
+            block = &self.blocks[block_idx]
+        }
+
+        let local_pos = pos % self.settings.block_dimensions;
+        let local_idx = math::to_1d_index(local_pos, self.settings.block_dimensions);
+        block[local_idx]
+    }
+
     pub fn get_block(&mut self, pos: glam::UVec3) -> Vec<Voxel> {
         let dims = self.settings.dimensions;
         assert!(pos.x < dims.x && pos.y < dims.y && pos.z < dims.z);
